@@ -258,55 +258,37 @@ export default function App() {
     }
   };
 
-  // Kick a player (host only, lobby)
-  const handleKickPlayer = async (kickedPlayerName: string) => {
-    if (!partyCode || !playerName) return;
+  // Disband lobby (host only) — writes disbanded state directly to KV store via REST API
+  const handleDisbandLobby = async () => {
+    if (!partyCode || !party) return;
 
     try {
-      const response = await fetch(`${API_URL}/party/${partyCode}/kick`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ playerName: kickedPlayerName, hostName: playerName })
-      });
+      const disbanded = { ...party, state: 'disbanded' };
+      const response = await fetch(
+        `https://${projectId}.supabase.co/rest/v1/kv_store_a83e0fd9?key=eq.party:${partyCode}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: publicAnonKey,
+            Authorization: `Bearer ${publicAnonKey}`,
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify({ value: disbanded }),
+        }
+      );
 
-      const data = await safeJson(response);
-
-      if (data.success) {
-        setParty(data.party);
-      }
-    } catch (err) {
-      console.error('Error kicking player:', err);
-      alert('Could not kick player — please check your connection.');
-    }
-  };
-
-  // Leave lobby
-  const handleLeaveLobby = async () => {
-    if (!partyCode || !playerName) return;
-
-    try {
-      const response = await fetch(`${API_URL}/party/${partyCode}/leave`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ playerName })
-      });
-
-      const data = await safeJson(response);
-      if (data.success) {
-        // Clear local state — player left voluntarily
+      if (response.ok) {
+        setIsDisbanded(true);
         setPartyCode(null);
         setParty(null);
         setPlayerName(null);
+      } else {
+        alert('Could not disband lobby — please try again.');
       }
     } catch (err) {
-      console.error('Error leaving party:', err);
-      alert('Could not leave — please check your connection.');
+      console.error('Error disbanding lobby:', err);
+      alert('Could not disband lobby — please check your connection.');
     }
   };
 
@@ -527,9 +509,8 @@ export default function App() {
         hostName={party.host}
         isHost={isHost}
         onStartGame={handleStartGame}
-        onKickPlayer={handleKickPlayer}
         onSwapPositions={handleSwapPositions}
-        onLeaveLobby={handleLeaveLobby}
+        onDisbandLobby={handleDisbandLobby}
       />
     );
   }
