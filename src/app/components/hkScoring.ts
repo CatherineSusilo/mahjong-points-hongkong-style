@@ -53,10 +53,11 @@ export function faanToBasePoints(faan: number): number {
  *   - Own season (matches seatNum)  → +1
  */
 export function computeFlowerFaan(bonusTiles: string[], seatWindNum: number): number {
-  if (bonusTiles.length === 0) return 1; // NO_FLOWERS bonus
+  const safeBonusTiles = bonusTiles ?? [];
+  if (safeBonusTiles.length === 0) return 0;
 
-  const flowers = bonusTiles.filter(t => t in FLOWER_POSITION);
-  const seasons = bonusTiles.filter(t => t in SEASON_POSITION);
+  const flowers = safeBonusTiles.filter(t => t in FLOWER_POSITION);
+  const seasons = safeBonusTiles.filter(t => t in SEASON_POSITION);
 
   const flowerFaan =
     flowers.length === 4 ? 2
@@ -99,16 +100,17 @@ export function autoDetectSuitPattern(
   tiles: string[],
   kongs: string[],
 ): DetectedSuitPattern | null {
+  const safeKongs = kongs ?? [];
   // Build a combined flat tile list for pattern analysis
   const allTiles = [
     ...tiles,
-    ...kongs.flatMap(k => [k, k, k, k]),
+    ...safeKongs.flatMap(k => [k, k, k, k]),
   ];
 
   if (allTiles.length === 0) return null;
 
   // 1. ALL_KONGS: exactly 4 kongs declared (no other hand content needed beyond pair)
-  if (kongs.length === 4) {
+  if (safeKongs.length === 4) {
     return {
       key: 'ALL_KONGS', faan: 13, isCapped: true,
       zhName: '四槓子', enName: 'All Kongs',
@@ -121,7 +123,7 @@ export function autoDetectSuitPattern(
     '一萬', '九萬', '一筒', '九筒', '一索', '九索',
     '東', '南', '西', '北', '中', '發', '白',
   ]);
-  if (tiles.length === 14 && kongs.length === 0) {
+  if (tiles.length === 14 && safeKongs.length === 0) {
     const counts = countTiles(tiles);
     const keys = Object.keys(counts);
     const allOrphan = keys.every(t => orphanSet.has(t));
@@ -136,7 +138,18 @@ export function autoDetectSuitPattern(
     }
   }
 
-  // 3. ALL_HONOUR: every tile is an honour (wind or dragon)
+  // 3. GREAT_WINDS: all 4 wind tiles each form a pung or kong
+  const allCounts = countTiles(allTiles);
+  const greatWindCounts = WIND_ORDER.map(w => allCounts[w] ?? 0);
+  if (greatWindCounts.every(c => c >= 3)) {
+    return {
+      key: 'GREAT_WINDS', faan: 13, isCapped: true,
+      zhName: '大四喜', enName: 'Great Winds',
+      desc: 'All four wind tiles form pungs or kongs.',
+    };
+  }
+
+  // 4. ALL_HONOUR: every tile is an honour (wind or dragon)
   if (allTiles.every(t => HONOUR_TILES.has(t))) {
     return {
       key: 'ALL_HONOUR', faan: 10, isCapped: true,
@@ -145,8 +158,13 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 4. ORPHANS: every tile is a terminal or honour (1s, 9s, winds, dragons)
-  if (allTiles.every(t => TERMINAL_OR_HONOUR.has(t))) {
+  // 5. ORPHANS: every tile is a terminal or honour (1s, 9s, winds, dragons)
+  // Skip if hand qualifies as Small Winds (3 wind pungs + 1 wind pair) — Small Winds takes priority
+  const windCountsForOrphans = WIND_ORDER.map(w => allCounts[w] ?? 0);
+  const isSmallWindsHand =
+    windCountsForOrphans.filter(c => c >= 3).length === 3 &&
+    windCountsForOrphans.filter(c => c === 2).length >= 1;
+  if (allTiles.every(t => TERMINAL_OR_HONOUR.has(t)) && !isSmallWindsHand) {
     return {
       key: 'ORPHANS', faan: 10, isCapped: true,
       zhName: '清老頭', enName: 'Orphans',
@@ -154,7 +172,7 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 5. ALL_ONE_SUIT: all tiles same suit, no honours
+  // 6. ALL_ONE_SUIT: all tiles same suit, no honours
   const suits = new Set(allTiles.map(t => SUIT_MAP[t]).filter(Boolean));
   const hasHonour = allTiles.some(t => HONOUR_TILES.has(t));
   if (suits.size === 1 && !hasHonour) {
@@ -165,7 +183,7 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 6. MIXED_ONE_SUIT: exactly one suit + at least one honour, no cross-suit mix
+  // 7. MIXED_ONE_SUIT: exactly one suit + at least one honour, no cross-suit mix
   if (suits.size === 1 && hasHonour) {
     return {
       key: 'MIXED_ONE_SUIT', faan: 3, isCapped: false,
@@ -289,11 +307,12 @@ export interface DetectedPattern {
  * stackable pattern that applies. Capped hands are returned alone.
  */
 export function detectAllPatterns(tiles: string[], kongs: string[]): DetectedPattern[] {
-  const allTiles = [...tiles, ...kongs.flatMap(k => [k, k, k, k])];
+  const safeKongs = kongs ?? [];
+  const allTiles = [...tiles, ...safeKongs.flatMap(k => [k, k, k, k])];
   if (allTiles.length === 0) return [];
 
   // Check for capped composition first — these never stack
-  const capped = autoDetectSuitPattern(tiles, kongs);
+  const capped = autoDetectSuitPattern(tiles, safeKongs);
   if (capped?.isCapped) {
     return [{ ...capped, key: capped.key as string }];
   }
@@ -312,19 +331,33 @@ export function detectAllPatterns(tiles: string[], kongs: string[]): DetectedPat
     patterns.push({ key: 'SMALL_DRAGONS', faan: 5, isCapped: false, zhName: '小三元', enName: 'Small Dragons' });
   }
 
+  // ── Wind patterns (Small Winds) ──────────────────────────────────────────────
+  // Great Winds (大四喜) is capped and caught by autoDetectSuitPattern above
+  const windCounts = WIND_ORDER.map(w => allCounts[w] ?? 0);
+  const punggedWinds = windCounts.filter(c => c >= 3).length;
+  const pairedWinds  = windCounts.filter(c => c === 2).length;
+
+  if (punggedWinds === 3 && pairedWinds >= 1) {
+    patterns.push({ key: 'SMALL_WINDS', faan: 6, isCapped: false, zhName: '小四喜', enName: 'Small Winds' });
+  }
+
   // ── All Triplets (對對胡) ──────────────────────────────────────────────────
   // ALL_KONGS (kongs.length === 4) is a capped hand caught above
-  if (kongs.length < 4) {
+  if (safeKongs.length < 4) {
     const tileCounts = countTiles(tiles);
-    const vals = Object.values(tileCounts);
-    const pairCount = vals.filter(v => v === 2).length;
-    if (vals.length > 0 && vals.every(v => v === 2 || v === 3) && pairCount === 1) {
+    const kongTileSet = new Set(safeKongs);
+    // Kong tiles appear 4 times in `tiles`; normalize them to 3 (pung) for set-type detection
+    const normalizedVals = Object.entries(tileCounts).map(([t, c]) =>
+      kongTileSet.has(t) ? 3 : c
+    );
+    const pairCount = normalizedVals.filter(v => v === 2).length;
+    if (normalizedVals.length > 0 && normalizedVals.every(v => v === 2 || v === 3) && pairCount === 1) {
       patterns.push({ key: 'ALL_TRIPLETS', faan: 3, isCapped: false, zhName: '對對胡', enName: 'All Triplets' });
     }
   }
 
   // ── Seven Pairs (七對子) ───────────────────────────────────────────────────
-  if (tiles.length === 14 && kongs.length === 0) {
+  if (tiles.length === 14 && safeKongs.length === 0) {
     const tc = countTiles(tiles);
     if (Object.keys(tc).length === 7 && Object.values(tc).every(v => v === 2)) {
       patterns.push({ key: 'SEVEN_PAIRS', faan: 4, isCapped: false, zhName: '七對子', enName: 'Seven Pairs' });
@@ -349,7 +382,8 @@ export function computeWindDragonPungFaan(
   seatWind: string,
   prevailingWind: string,
 ): { faan: number; breakdown: Array<{ label: string; faan: number }> } {
-  const allTiles = [...tiles, ...kongs.flatMap(k => [k, k, k, k])];
+  const safeKongs = kongs ?? [];
+  const allTiles = [...tiles, ...safeKongs.flatMap(k => [k, k, k, k])];
   const counts = countTiles(allTiles);
   const breakdown: Array<{ label: string; faan: number }> = [];
 

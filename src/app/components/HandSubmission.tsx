@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState } from 'react';
-import { AlertCircle, Check, X } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react';
 import { detectAllPatterns, computeWindDragonPungFaan, computeFlowerFaan, WIND_ORDER } from './hkScoring';
 
 // ── Tile images (same directory, same glob) ────────────────────────────────
@@ -33,8 +33,6 @@ const TILE_TYPES: { [key: string]: string[] } = {
 };
 
 const BONUS_CATEGORIES = new Set(['花', '季']);
-const KONG_CATEGORIES = Object.keys(TILE_TYPES).filter(c => !BONUS_CATEGORIES.has(c));
-
 function TileImg({ tile, size = 'sm' }: { tile: string; size?: 'sm' | 'lg' }) {
   const src = TILE_IMAGE[tile];
   const cls = size === 'lg' ? 'h-14 w-auto mx-auto' : 'h-9 w-auto';
@@ -55,14 +53,19 @@ interface HandSubmissionProps {
 export function HandSubmission({ playerName, position, prevailingWind, claimedBy, currentTiles, hasSubmitted, onSubmit }: HandSubmissionProps) {
   const [tiles, setTiles] = useState<string[]>(currentTiles);
   const [bonusTiles, setBonusTiles] = useState<string[]>([]);
-  const [kongs, setKongs] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('萬子');
-  const [kongPickerOpen, setKongPickerOpen] = useState(false);
-  const [kongPickerCategory, setKongPickerCategory] = useState<string>('萬子');
+
+  // Auto-detect kongs: any tile appearing 4+ times
+  const tileCountMap: Record<string, number> = {};
+  for (const t of tiles) tileCountMap[t] = (tileCountMap[t] ?? 0) + 1;
+  const autoKongs = Object.entries(tileCountMap).filter(([, c]) => c >= 4).map(([t]) => t);
+  const kongSet = new Set(autoKongs);
+  const effectiveCount = tiles.length - autoKongs.length;
 
   const addTile = (tile: string) => {
     if (BONUS_CATEGORIES.has(selectedCategory)) {
-      setBonusTiles(prev => [...prev, tile]);
+      // Each flower/season tile is unique — only one of each in the set
+      if (!bonusTiles.includes(tile)) setBonusTiles(prev => [...prev, tile]);
     } else {
       setTiles(prev => [...prev, tile]);
     }
@@ -71,24 +74,18 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
   const removeTile = (index: number) => setTiles(t => t.filter((_, i) => i !== index));
   const removeBonusTile = (index: number) => setBonusTiles(t => t.filter((_, i) => i !== index));
 
-  const addKong = (tile: string) => {
-    if (kongs.length < 4) setKongs(prev => [...prev, tile]);
-    setKongPickerOpen(false);
-  };
-  const removeKong = (index: number) => setKongs(k => k.filter((_, i) => i !== index));
-
   const tileCount = TILE_TYPES[selectedCategory]?.length ?? 9;
   const gridCols = tileCount === 9 ? 'grid-cols-5' : 'grid-cols-4';
 
   // Live faan hint
   const seatNum = (WIND_ORDER.indexOf(position as typeof WIND_ORDER[number]) + 1) || 1;
-  const hintPatterns = detectAllPatterns(tiles, kongs);
-  const { faan: hintWdFaan, breakdown: hintWdBreakdown } = computeWindDragonPungFaan(tiles, kongs, position, prevailingWind);
+  const hintPatterns = detectAllPatterns(tiles, autoKongs);
+  const { faan: hintWdFaan, breakdown: hintWdBreakdown } = computeWindDragonPungFaan(tiles, autoKongs, position, prevailingWind);
   const bonusFaan = computeFlowerFaan(bonusTiles, seatNum);
   const hintIsCapped = hintPatterns[0]?.isCapped ?? false;
   const hintPatternFaan = hintPatterns.reduce((s, p) => s + p.faan, 0);
   const hintTotal = Math.min(13, hintPatternFaan + (hintIsCapped ? 0 : hintWdFaan + bonusFaan));
-  const showHint = tiles.length > 0 || kongs.length > 0 || bonusTiles.length > 0;
+  const showHint = tiles.length > 0 || bonusTiles.length > 0;
 
   if (hasSubmitted) {
     return (
@@ -100,13 +97,13 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Hand Submitted!</h2>
           <p className="text-gray-600 mb-4">Waiting for other players...</p>
           <div className="bg-gray-50 rounded-lg p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-2">Your Hand ({tiles.length} tiles)</p>
+            <p className="text-sm font-semibold text-gray-700 mb-2">Your Hand ({effectiveCount} tiles)</p>
             <div className="flex flex-wrap gap-1 justify-center">
               {tiles.map((tile, i) => <TileImg key={i} tile={tile} size="sm" />)}
             </div>
-            {kongs.length > 0 && (
-              <div className="mt-2">
-                <p className="text-xs text-gray-500 mb-1">Kongs: {kongs.join(', ')}</p>
+            {autoKongs.length > 0 && (
+              <div className="mt-1">
+                <p className="text-xs text-blue-600 font-semibold">槓 {autoKongs.join(', ')}</p>
               </div>
             )}
             {bonusTiles.length > 0 && (
@@ -122,38 +119,6 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 p-4">
-      {/* Kong Picker Modal */}
-      {kongPickerOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <p className="font-bold text-gray-900">Add Kong (槓) — pick tile</p>
-              <button onClick={() => setKongPickerOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-4 gap-1.5">
-                {KONG_CATEGORIES.map(cat => (
-                  <button key={cat} onClick={() => setKongPickerCategory(cat)}
-                    className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      kongPickerCategory === cat ? 'bg-orange-600 text-white shadow' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}>{cat}</button>
-                ))}
-              </div>
-              <div className={`grid ${TILE_TYPES[kongPickerCategory].length === 9 ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5`}>
-                {TILE_TYPES[kongPickerCategory].map(tile => (
-                  <button key={tile} onClick={() => addKong(tile)}
-                    className="rounded-lg p-1 flex items-center justify-center border-2 border-gray-200 hover:border-orange-400 bg-gray-50 hover:bg-orange-50 transition-all active:scale-95">
-                    <TileImg tile={tile} size="lg" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="max-w-2xl mx-auto">
         {/* Alert */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4 border-l-4 border-orange-500">
@@ -182,9 +147,9 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
         {/* Current Hand */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-gray-900">Your Hand ({tiles.length} tiles)</p>
-            {(tiles.length > 0 || bonusTiles.length > 0 || kongs.length > 0) && (
-              <button onClick={() => { setTiles([]); setBonusTiles([]); setKongs([]); }}
+            <p className="font-semibold text-gray-900">Your Hand ({effectiveCount} tiles)</p>
+            {(tiles.length > 0 || bonusTiles.length > 0) && (
+              <button onClick={() => { setTiles([]); setBonusTiles([]); }}
                 className="text-sm text-red-600 hover:text-red-700 font-medium">Clear All</button>
             )}
           </div>
@@ -196,13 +161,27 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
               : <div className="flex flex-wrap gap-1">
                   {tiles.map((tile, i) => (
                     <button key={i} onClick={() => removeTile(i)}
-                      className="bg-white rounded shadow border border-gray-200 hover:bg-red-50 hover:border-red-300 transition-colors p-0.5 flex items-center justify-center">
+                      className={`rounded shadow border transition-colors p-0.5 flex items-center justify-center ${
+                        kongSet.has(tile)
+                          ? 'bg-blue-50 border-blue-300 hover:bg-red-50 hover:border-red-300'
+                          : 'bg-white border-gray-200 hover:bg-red-50 hover:border-red-300'
+                      }`}>
                       <TileImg tile={tile} size="sm" />
                     </button>
                   ))}
                 </div>
             }
           </div>
+          {autoKongs.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {autoKongs.map(tile => (
+                <div key={tile} className="flex items-center gap-0.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                  <span className="text-xs font-bold text-blue-700 mr-1">槓</span>
+                  {[0,1,2,3].map(i => <TileImg key={i} tile={tile} size="sm" />)}
+                </div>
+              ))}
+            </div>
+          )}
           <p className="text-xs text-amber-900 bg-amber-50 rounded-lg px-3 py-2 text-center mt-2">Tap to remove</p>
 
           {/* Live faan hint */}
@@ -242,29 +221,6 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
             </div>
           )}
 
-          {/* Declared Kongs */}
-          <div className="mt-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-600">Declared Kongs (槓) {kongs.length}/4</p>
-              <button onClick={() => setKongPickerOpen(true)} disabled={kongs.length >= 4}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">+ Kong</button>
-            </div>
-            {kongs.length > 0 && (
-              <div className="space-y-1.5">
-                {kongs.map((tile, idx) => (
-                  <div key={idx} className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1 border border-blue-200">
-                    <div className="flex gap-0.5 flex-1">
-                      {[0,1,2,3].map(i => <TileImg key={i} tile={tile} size="sm" />)}
-                    </div>
-                    <button onClick={() => removeKong(idx)} className="p-0.5 hover:bg-red-100 rounded text-red-400 hover:text-red-600">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Bonus Tiles */}
           <div className="mt-3">
             <p className="text-xs font-semibold text-gray-600 mb-2">Bonus Tiles (花/季)</p>
@@ -298,17 +254,27 @@ export function HandSubmission({ playerName, position, prevailingWind, claimedBy
             ))}
           </div>
           <div className={`grid ${gridCols} gap-1.5`}>
-            {TILE_TYPES[selectedCategory].map(tile => (
-              <button key={tile} onClick={() => addTile(tile)}
-                className="rounded-lg p-1 flex items-center justify-center border-2 border-gray-200 hover:border-orange-400 bg-gray-50 hover:bg-orange-50 transition-all active:scale-95">
-                <TileImg tile={tile} size="lg" />
-              </button>
-            ))}
+            {TILE_TYPES[selectedCategory].map(tile => {
+              const alreadyAdded = BONUS_CATEGORIES.has(selectedCategory) && bonusTiles.includes(tile);
+              return (
+                <button key={tile} onClick={() => addTile(tile)}
+                  disabled={alreadyAdded}
+                  className={`rounded-lg p-1 flex items-center justify-center border-2 transition-all active:scale-95 ${
+                    alreadyAdded
+                      ? 'border-gray-200 bg-gray-50 opacity-30 cursor-not-allowed'
+                      : BONUS_CATEGORIES.has(selectedCategory)
+                        ? 'border-gray-200 hover:border-orange-400 bg-gray-50 hover:bg-orange-50'
+                        : 'border-gray-200 hover:border-orange-400 bg-gray-50 hover:bg-orange-50'
+                  }`}>
+                  <TileImg tile={tile} size="lg" />
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Submit */}
-        <button onClick={() => onSubmit(tiles, bonusTiles, kongs)}
+        <button onClick={() => onSubmit(tiles, bonusTiles, autoKongs)}
           className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-4 rounded-xl font-bold text-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg hover:shadow-xl">
           Submit Hand
         </button>

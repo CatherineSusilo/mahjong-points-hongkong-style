@@ -1,3 +1,4 @@
+// @ts-nocheck — Deno runtime file; type-checked by Deno LS, not tsc
 import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
@@ -232,6 +233,33 @@ app.post("/make-server-a83e0fd9/party/:code/submit", async (c) => {
   }
 });
 
+// Un-submit hand (edit before everyone has submitted)
+app.post("/make-server-a83e0fd9/party/:code/unsubmit", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { playerName } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    // Only allowed while still in submitting state
+    if (party.state !== 'submitting') {
+      return c.json({ success: false, error: 'Cannot edit after all players have submitted' }, 400);
+    }
+
+    delete party.submissions[playerName];
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`Hand un-submitted by ${playerName} in party ${partyCode}`);
+
+    return c.json({ success: true, party });
+  } catch (error) {
+    console.error('Error un-submitting hand:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
 // ── Helpers for wind rotation ───────────────────────────────────────────────
 function fanToBasePoints(fan: number): number {
   if (fan < 3) return 0;
@@ -271,12 +299,13 @@ app.post("/make-server-a83e0fd9/party/:code/score", async (c) => {
     if (!party.prevailingWind) party.prevailingWind = '東';
     if (party.dealerChanges === undefined) party.dealerChanges = 0;
 
+    const changes: Record<string, number> = {};
+
     if (isDraw) {
       // Draw: no score changes, dealer keeps East seat
+      party.scoreData = { winnerName: '', loserName: null, fan: 0, isSelfDrawn: false, isDraw: true, changes };
       party.round += 1;
-      party.state = 'playing';
-      party.winData = null;
-      party.submissions = {};
+      party.state = 'score_summary';
       await kv.set(`party:${partyCode}`, party);
       console.log(`Draw recorded in party ${partyCode}`);
       return c.json({ success: true, party });
@@ -295,16 +324,20 @@ app.post("/make-server-a83e0fd9/party/:code/score", async (c) => {
           const loserMult = player.position === '東' ? 2 : 1;
           const amount = basePoints * 2 * winnerMult * loserMult;
           party.scores[player.name] -= amount;
+          changes[player.name] = -amount;
           winnerTotal += amount;
         }
       });
       party.scores[winnerName] += winnerTotal;
+      changes[winnerName] = winnerTotal;
     } else if (loserName) {
       const loser = party.players.find((p: any) => p.name === loserName);
       const loserMult = loser?.position === '東' ? 2 : 1;
       const amount = basePoints * 2 * winnerMult * loserMult;
       party.scores[winnerName] += amount;
       party.scores[loserName] -= amount;
+      changes[winnerName] = amount;
+      changes[loserName] = -amount;
     }
 
     // Wind rotation: non-dealer win → rotate seats counter-clockwise
@@ -322,10 +355,9 @@ app.post("/make-server-a83e0fd9/party/:code/score", async (c) => {
     }
     // Dealer won: seats and prevailing wind unchanged
 
+    party.scoreData = { winnerName, loserName: loserName ?? null, fan, isSelfDrawn, isDraw: false, changes };
     party.round += 1;
-    party.state = 'playing';
-    party.winData = null;
-    party.submissions = {};
+    party.state = 'score_summary';
 
     await kv.set(`party:${partyCode}`, party);
     console.log(`Score recorded in party ${partyCode}: ${winnerName} won with ${fan} fan`);
@@ -333,6 +365,65 @@ app.post("/make-server-a83e0fd9/party/:code/score", async (c) => {
     return c.json({ success: true, party });
   } catch (error) {
     console.error('Error recording score:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// Advance from score summary to round-start lobby (host only)
+app.post("/make-server-a83e0fd9/party/:code/continue", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { hostName } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    if (party.host !== hostName) {
+      return c.json({ success: false, error: 'Only host can continue to next round' }, 403);
+    }
+
+    party.state = 'round_start';
+    party.winData = null;
+    party.submissions = {};
+    party.scoreData = null;
+
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`Moved to round start lobby in party ${partyCode} by ${hostName}`);
+
+    return c.json({ success: true, party });
+  } catch (error) {
+    console.error('Error continuing round:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// Start the next round — clears player tiles and transitions to playing (host only)
+app.post("/make-server-a83e0fd9/party/:code/start-round", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { hostName } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    if (party.host !== hostName) {
+      return c.json({ success: false, error: 'Only host can start the round' }, 403);
+    }
+
+    // Reset player tiles so TileInput starts fresh
+    party.players.forEach((p: any) => { p.tiles = []; });
+    party.state = 'playing';
+
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`Round started in party ${partyCode} by ${hostName}`);
+
+    return c.json({ success: true, party });
+  } catch (error) {
+    console.error('Error starting round:', error);
     return c.json({ success: false, error: String(error) }, 500);
   }
 });

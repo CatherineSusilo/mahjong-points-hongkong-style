@@ -4,6 +4,8 @@ import { PartyLobby } from './components/PartyLobby';
 import { TileInput } from './components/TileInput';
 import { HandSubmission } from './components/HandSubmission';
 import { ScoringScreen } from './components/ScoringScreen';
+import { ScoreSummaryScreen } from './components/ScoreSummaryScreen';
+import { RoundStartScreen } from './components/RoundStartScreen';
 import { FinalScoresScreen } from './components/FinalScoresScreen';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
@@ -18,13 +20,21 @@ interface Party {
   code: string;
   host: string;
   players: Player[];
-  state: 'lobby' | 'playing' | 'submitting' | 'scoring' | 'ended';
+  state: 'lobby' | 'playing' | 'submitting' | 'scoring' | 'score_summary' | 'round_start' | 'ended';
   round: number;
   scores: { [name: string]: number };
   winData: { claimedBy: string; timestamp: number } | null;
-  submissions: { [name: string]: { tiles: string[]; timestamp: number } };
+  submissions: { [name: string]: { tiles: string[]; bonusTiles: string[]; kongs: string[]; timestamp: number } };
   prevailingWind: string;
   dealerChanges: number;
+  scoreData: {
+    winnerName: string;
+    loserName: string | null;
+    fan: number;
+    isSelfDrawn: boolean;
+    isDraw: boolean;
+    changes: { [name: string]: number };
+  } | null;
 }
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a83e0fd9`;
@@ -253,6 +263,48 @@ export default function App() {
     }
   };
 
+  // Continue to round-start lobby (host only)
+  const handleContinueRound = async () => {
+    if (!partyCode || !playerName) return;
+
+    try {
+      const response = await fetch(`${API_URL}/party/${partyCode}/continue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ hostName: playerName })
+      });
+
+      const data = await response.json();
+      if (data.success) setParty(data.party);
+    } catch (err) {
+      console.error('Error continuing round:', err);
+    }
+  };
+
+  // Start the round (host only, from round-start lobby)
+  const handleStartRound = async () => {
+    if (!partyCode || !playerName) return;
+
+    try {
+      const response = await fetch(`${API_URL}/party/${partyCode}/start-round`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ hostName: playerName })
+      });
+
+      const data = await response.json();
+      if (data.success) setParty(data.party);
+    } catch (err) {
+      console.error('Error starting round:', err);
+    }
+  };
+
   // End the game (host only)
   const handleEndGame = async () => {
     if (!partyCode || !playerName) return;
@@ -377,7 +429,7 @@ export default function App() {
 
   // Submitting state
   if (party.state === 'submitting' && currentPlayer && party.winData) {
-    const hasSubmitted = !!party.submissions[playerName];
+    const serverHasSubmitted = !!party.submissions[playerName];
 
     return (
       <HandSubmission
@@ -386,7 +438,7 @@ export default function App() {
         prevailingWind={party.prevailingWind || '東'}
         claimedBy={party.winData.claimedBy}
         currentTiles={currentPlayer.tiles}
-        hasSubmitted={hasSubmitted}
+        hasSubmitted={serverHasSubmitted}
         onSubmit={handleHandSubmit}
       />
     );
@@ -398,11 +450,46 @@ export default function App() {
       <ScoringScreen
         players={party.players}
         claimedBy={party.winData.claimedBy}
+        submissions={party.submissions}
         currentScores={party.scores}
         round={party.round}
         prevailingWind={party.prevailingWind || '東'}
         dealerName={party.players.find(p => p.position === '東')?.name || party.host}
+        isHost={isHost}
+        playerName={playerName}
         onScoreSubmit={handleScoreSubmit}
+      />
+    );
+  }
+
+  // Round-start lobby
+  if (party.state === 'round_start') {
+    return (
+      <RoundStartScreen
+        players={party.players}
+        scores={party.scores}
+        round={party.round}
+        prevailingWind={party.prevailingWind || '東'}
+        dealerName={party.players.find(p => p.position === '東')?.name || party.host}
+        isHost={isHost}
+        playerName={playerName}
+        onStartRound={handleStartRound}
+      />
+    );
+  }
+
+  // Score summary state
+  if (party.state === 'score_summary' && party.scoreData) {
+    return (
+      <ScoreSummaryScreen
+        players={party.players}
+        scores={party.scores}
+        round={party.round}
+        prevailingWind={party.prevailingWind || '東'}
+        dealerName={party.players.find(p => p.position === '東')?.name || party.host}
+        scoreData={party.scoreData}
+        isHost={isHost}
+        onContinue={handleContinueRound}
       />
     );
   }

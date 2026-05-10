@@ -1,9 +1,8 @@
 /// <reference types="vite/client" />
 import { useState } from 'react';
-import { Trophy, Menu, X, Flag, BookOpen, Calculator } from 'lucide-react';
+import { Trophy, Menu, X, Flag, BookOpen } from 'lucide-react';
 import { detectAllPatterns, computeWindDragonPungFaan, computeFlowerFaan, WIND_ORDER } from './hkScoring';
 import { InfoPage } from './InfoPage';
-import { ScoreCalculator } from './ScoreCalculator';
 
 // Load all tile GIFs at build time via Vite glob
 const _tileGifs = import.meta.glob('./tiles/*.gif', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
@@ -65,21 +64,26 @@ function TileImg({ tile, size = 'sm' }: { tile: string; size?: 'sm' | 'lg' }) {
 export function TileInput({ playerName, position, prevailingWind, isHost, onWinClaimed, onTilesUpdate, onEndGame, currentTiles }: TileInputProps) {
   const [tiles, setTiles] = useState<string[]>(currentTiles);
   const [bonusTiles, setBonusTiles] = useState<string[]>([]);
-  const [kongs, setKongs] = useState<string[]>([]);
   const [concealed, setConcealed] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('萬子');
   const [menuOpen, setMenuOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [calcOpen, setCalcOpen] = useState(false);
-  const [kongPickerOpen, setKongPickerOpen] = useState(false);
-  const [kongPickerCategory, setKongPickerCategory] = useState<string>('萬子');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
+  // Auto-detect kongs: any tile appearing 4+ times is a kong
+  const tileCountMap: Record<string, number> = {};
+  for (const t of tiles) tileCountMap[t] = (tileCountMap[t] ?? 0) + 1;
+  const autoKongs = Object.entries(tileCountMap).filter(([, c]) => c >= 4).map(([t]) => t);
+  const kongSet = new Set(autoKongs);
+  // Each kong uses 4 tiles but counts as 3 (4th is the extra drawn tile)
+  const effectiveCount = tiles.length - autoKongs.length;
+
   const addTile = (tile: string) => {
     if (BONUS_CATEGORIES.has(selectedCategory)) {
-      setBonusTiles(prev => [...prev, tile]);
-    } else if (tiles.length < 14) {
+      // Each flower/season tile is unique — only one of each in the set
+      if (!bonusTiles.includes(tile)) setBonusTiles(prev => [...prev, tile]);
+    } else if (effectiveCount < 14) {
       const newTiles = [...tiles, tile];
       setTiles(newTiles);
       onTilesUpdate(newTiles);
@@ -99,19 +103,7 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
   const clearAll = () => {
     setTiles([]);
     setBonusTiles([]);
-    setKongs([]);
     onTilesUpdate([]);
-  };
-
-  const addKong = (tile: string) => {
-    if (kongs.length < 4) {
-      setKongs(prev => [...prev, tile]);
-    }
-    setKongPickerOpen(false);
-  };
-
-  const removeKong = (index: number) => {
-    setKongs(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDragStart = (index: number) => setDragIndex(index);
@@ -158,63 +150,9 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
   const tileCount = TILE_TYPES[selectedCategory].length;
   const gridCols = tileCount === 9 ? 'grid-cols-5' : 'grid-cols-4';
 
-  // Kong picker categories (no bonus tiles)
-  const KONG_CATEGORIES = Object.keys(TILE_TYPES).filter(c => !BONUS_CATEGORIES.has(c));
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-amber-50 p-4">
       {infoOpen && <InfoPage onClose={() => setInfoOpen(false)} />}
-      {calcOpen && (
-        <ScoreCalculator
-          tiles={tiles}
-          bonusTiles={bonusTiles}
-          kongs={kongs}
-          concealed={concealed}
-          position={position}
-          prevailingWind={prevailingWind}
-          onClose={() => setCalcOpen(false)}
-        />
-      )}
-
-      {/* Kong Picker Modal */}
-      {kongPickerOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-              <p className="font-bold text-gray-900">Add Kong (槓) — pick tile</p>
-              <button onClick={() => setKongPickerOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="grid grid-cols-4 gap-1.5">
-                {KONG_CATEGORIES.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setKongPickerCategory(cat)}
-                    className={`py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      kongPickerCategory === cat
-                        ? 'bg-red-600 text-white shadow'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >{cat}</button>
-                ))}
-              </div>
-              <div className={`grid ${TILE_TYPES[kongPickerCategory].length === 9 ? 'grid-cols-5' : 'grid-cols-4'} gap-1.5`}>
-                {TILE_TYPES[kongPickerCategory].map(tile => (
-                  <button
-                    key={tile}
-                    onClick={() => addKong(tile)}
-                    className="rounded-lg p-1 flex items-center justify-center border-2 border-gray-200 hover:border-blue-400 bg-gray-50 hover:bg-blue-50 transition-all active:scale-95"
-                  >
-                    <TileImg tile={tile} size="lg" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
@@ -262,14 +200,6 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
                       </button>
                       <div className="border-t border-gray-100 my-1" />
                       <button
-                        onClick={() => { setMenuOpen(false); setCalcOpen(true); }}
-                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-50 text-left transition-colors"
-                      >
-                        <Calculator className="w-5 h-5 text-green-600 shrink-0" />
-                        <span className="font-semibold text-gray-800">Calculate Score (計分)</span>
-                      </button>
-                      <div className="border-t border-gray-100 my-1" />
-                      <button
                         onClick={isHost ? handleMenuEndGame : undefined}
                         disabled={!isHost}
                         className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
@@ -295,7 +225,7 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
         {/* Current Hand */}
         <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-gray-900">Your Hand ({tiles.length}/14)</p>
+            <p className="font-semibold text-gray-900">Your Hand ({effectiveCount}/14)</p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setConcealed(prev => !prev)}
@@ -307,7 +237,7 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
               >
                 門前清 {concealed ? 'ON' : 'OFF'}
               </button>
-              {(tiles.length > 0 || bonusTiles.length > 0 || kongs.length > 0) && (
+              {(tiles.length > 0 || bonusTiles.length > 0) && (
                 <button onClick={clearAll} className="text-sm text-red-600 hover:text-red-700 font-medium">
                   Clear All
                 </button>
@@ -335,7 +265,11 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
                   >
                     <button
                       onClick={() => removeTile(index)}
-                      className="bg-white rounded shadow border border-gray-200 hover:bg-red-50 hover:border-red-300 transition-colors cursor-move select-none p-0.5 flex items-center justify-center"
+                      className={`rounded shadow border transition-colors cursor-move select-none p-0.5 flex items-center justify-center ${
+                        kongSet.has(tile)
+                          ? 'bg-blue-50 border-blue-300 hover:bg-red-50 hover:border-red-300'
+                          : 'bg-white border-gray-200 hover:bg-red-50 hover:border-red-300'
+                      }`}
                     >
                       <TileImg tile={tile} size="sm" />
                     </button>
@@ -345,15 +279,26 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
             )}
           </div>
 
+          {autoKongs.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {autoKongs.map(tile => (
+                <div key={tile} className="flex items-center gap-0.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1">
+                  <span className="text-xs font-bold text-blue-700 mr-1">槓</span>
+                  {[0,1,2,3].map(i => <TileImg key={i} tile={tile} size="sm" />)}
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="text-xs text-amber-900 bg-amber-50 rounded-lg px-3 py-2 text-center mt-2">
             Tap to remove • Drag to reorder
           </p>
 
           {/* Live Faan Hint */}
           {(() => {
-            if (tiles.length === 0 && kongs.length === 0 && bonusTiles.length === 0) return null;
-            const patterns = detectAllPatterns(tiles, kongs);
-            const { faan: wdFaan, breakdown: wdBreakdown } = computeWindDragonPungFaan(tiles, kongs, position, prevailingWind);
+            if (tiles.length === 0 && bonusTiles.length === 0) return null;
+            const patterns = detectAllPatterns(tiles, autoKongs);
+            const { faan: wdFaan, breakdown: wdBreakdown } = computeWindDragonPungFaan(tiles, autoKongs, position, prevailingWind);
             const seatNum = (WIND_ORDER.indexOf(position as typeof WIND_ORDER[number]) + 1) || 1;
             const bonusFaan = computeFlowerFaan(bonusTiles, seatNum);
             const isCapped = patterns[0]?.isCapped ?? false;
@@ -409,34 +354,6 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
             );
           })()}
 
-          {/* Declared Kongs */}
-          <div className="mt-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-600">Declared Kongs (槓) {kongs.length}/4</p>
-              <button
-                onClick={() => setKongPickerOpen(true)}
-                disabled={kongs.length >= 4}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >+ Kong</button>
-            </div>
-            {kongs.length > 0 && (
-              <div className="space-y-1.5">
-                {kongs.map((tile, idx) => (
-                  <div key={idx} className="flex items-center gap-1 bg-blue-50 rounded-lg px-2 py-1 border border-blue-200">
-                    <div className="flex gap-0.5 flex-1">
-                      {[0, 1, 2, 3].map(i => (
-                        <TileImg key={i} tile={tile} size="sm" />
-                      ))}
-                    </div>
-                    <button onClick={() => removeKong(idx)} className="p-0.5 hover:bg-red-100 rounded text-red-400 hover:text-red-600">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Bonus Tiles */}
           <div className="mt-3">
             <p className="text-xs font-semibold text-gray-600 mb-2">Bonus Tiles (花/季)</p>
@@ -485,20 +402,25 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
 
           {/* Tile Image Grid */}
           <div className={`grid ${gridCols} gap-2`}>
-            {TILE_TYPES[selectedCategory].map((tile) => (
-              <button
-                key={tile}
-                onClick={() => addTile(tile)}
-                disabled={!BONUS_CATEGORIES.has(selectedCategory) && tiles.length >= 14}
-                className={`rounded-lg p-1 flex items-center justify-center border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 ${
-                  BONUS_CATEGORIES.has(selectedCategory)
-                    ? 'border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100'
-                    : 'border-gray-200 hover:border-blue-400 bg-gray-50 hover:bg-blue-50'
-                }`}
-              >
-                <TileImg tile={tile} size="lg" />
-              </button>
-            ))}
+            {TILE_TYPES[selectedCategory].map((tile) => {
+              const alreadyAdded = BONUS_CATEGORIES.has(selectedCategory) && bonusTiles.includes(tile);
+              return (
+                <button
+                  key={tile}
+                  onClick={() => addTile(tile)}
+                  disabled={alreadyAdded || (!BONUS_CATEGORIES.has(selectedCategory) && effectiveCount >= 14)}
+                  className={`rounded-lg p-1 flex items-center justify-center border-2 transition-all disabled:cursor-not-allowed active:scale-95 ${
+                    alreadyAdded
+                      ? 'border-gray-200 bg-gray-50 opacity-30'
+                      : BONUS_CATEGORIES.has(selectedCategory)
+                        ? 'border-purple-200 hover:border-purple-400 bg-purple-50 hover:bg-purple-100'
+                        : 'border-gray-200 hover:border-blue-400 bg-gray-50 hover:bg-blue-50 disabled:opacity-50'
+                  }`}
+                >
+                  <TileImg tile={tile} size="lg" />
+                </button>
+              );
+            })}
           </div>
         </div>
 
