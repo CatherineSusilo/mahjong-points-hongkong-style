@@ -56,6 +56,8 @@ app.post("/make-server-a83e0fd9/party/create", async (c) => {
       scores: { [hostName]: 0 },
       winData: null,
       submissions: {},
+      prevailingWind: '東',
+      dealerChanges: 0,
       createdAt: Date.now()
     };
 
@@ -202,14 +204,14 @@ app.post("/make-server-a83e0fd9/party/:code/win", async (c) => {
 app.post("/make-server-a83e0fd9/party/:code/submit", async (c) => {
   try {
     const partyCode = c.req.param('code');
-    const { playerName, tiles } = await c.req.json();
+    const { playerName, tiles, bonusTiles, kongs } = await c.req.json();
 
     const party = await kv.get(`party:${partyCode}`);
     if (!party) {
       return c.json({ success: false, error: 'Party not found' }, 404);
     }
 
-    party.submissions[playerName] = { tiles, timestamp: Date.now() };
+    party.submissions[playerName] = { tiles, bonusTiles: bonusTiles ?? [], kongs: kongs ?? [], timestamp: Date.now() };
 
     // Check if all players submitted
     const allSubmitted = party.players.every(
@@ -230,31 +232,95 @@ app.post("/make-server-a83e0fd9/party/:code/submit", async (c) => {
   }
 });
 
+// ── Helpers for wind rotation ───────────────────────────────────────────────
+function fanToBasePoints(fan: number): number {
+  if (fan < 3) return 0;
+  if (fan <= 3) return 1;
+  if (fan <= 6) return 2;
+  if (fan <= 9) return 4;
+  return 8; // 10-13 limit
+}
+
+const SEAT_ORDER = ['東', '南', '西', '北'];
+
+function rotateSeatsCCW(players: any[]): void {
+  // Sort by current seat position
+  const sorted = [...players].sort(
+    (a, b) => SEAT_ORDER.indexOf(a.position) - SEAT_ORDER.indexOf(b.position),
+  );
+  // Counter-clockwise: South→East, West→South, North→West, East→North
+  const rotated = [sorted[1], sorted[2], sorted[3], sorted[0]];
+  rotated.forEach((rotP, i) => {
+    const p = players.find((x: any) => x.name === rotP.name);
+    if (p) p.position = SEAT_ORDER[i];
+  });
+}
+
 // Record win and update scores
 app.post("/make-server-a83e0fd9/party/:code/score", async (c) => {
   try {
     const partyCode = c.req.param('code');
-    const { winnerName, loserName, fan, isSelfDrawn } = await c.req.json();
+    const { winnerName, loserName, fan, isSelfDrawn, isDraw } = await c.req.json();
 
     const party = await kv.get(`party:${partyCode}`);
     if (!party) {
       return c.json({ success: false, error: 'Party not found' }, 404);
     }
 
-    const basePoints = Math.min(512, Math.pow(2, fan - 1));
+    // Backwards-compat: ensure wind tracking fields exist
+    if (!party.prevailingWind) party.prevailingWind = '東';
+    if (party.dealerChanges === undefined) party.dealerChanges = 0;
+
+    if (isDraw) {
+      // Draw: no score changes, dealer keeps East seat
+      party.round += 1;
+      party.state = 'playing';
+      party.winData = null;
+      party.submissions = {};
+      await kv.set(`party:${partyCode}`, party);
+      console.log(`Draw recorded in party ${partyCode}`);
+      return c.json({ success: true, party });
+    }
+
+    const basePoints = fanToBasePoints(fan);
+
+    const winner = party.players.find((p: any) => p.name === winnerName);
+    const winnerIsEast = winner?.position === '東';
+    const winnerMult = winnerIsEast ? 2 : 1;
 
     if (isSelfDrawn) {
+      let winnerTotal = 0;
       party.players.forEach((player: any) => {
-        if (player.name === winnerName) {
-          party.scores[player.name] += basePoints * (party.players.length - 1);
-        } else {
-          party.scores[player.name] -= basePoints;
+        if (player.name !== winnerName) {
+          const loserMult = player.position === '東' ? 2 : 1;
+          const amount = basePoints * 2 * winnerMult * loserMult;
+          party.scores[player.name] -= amount;
+          winnerTotal += amount;
         }
       });
+      party.scores[winnerName] += winnerTotal;
     } else if (loserName) {
-      party.scores[winnerName] += basePoints;
-      party.scores[loserName] -= basePoints;
+      const loser = party.players.find((p: any) => p.name === loserName);
+      const loserMult = loser?.position === '東' ? 2 : 1;
+      const amount = basePoints * 2 * winnerMult * loserMult;
+      party.scores[winnerName] += amount;
+      party.scores[loserName] -= amount;
     }
+
+    // Wind rotation: non-dealer win → rotate seats counter-clockwise
+    const winnerIsDealer = winner?.position === '東';
+
+    if (!winnerIsDealer) {
+      rotateSeatsCCW(party.players);
+      party.dealerChanges += 1;
+      // After all 4 players have been dealer, advance prevailing wind
+      if (party.dealerChanges >= 4) {
+        const idx = SEAT_ORDER.indexOf(party.prevailingWind);
+        party.prevailingWind = SEAT_ORDER[(idx + 1) % 4];
+        party.dealerChanges = 0;
+      }
+    }
+    // Dealer won: seats and prevailing wind unchanged
 
     party.round += 1;
     party.state = 'playing';

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 
-const TABS = ['Translations', 'Hands', 'Points Table'] as const;
+const TABS = ['Tiles', 'Hands', 'Points', 'Winds'] as const;
 type Tab = typeof TABS[number];
 
 // ─── Translations data ────────────────────────────────────────────
@@ -59,138 +59,64 @@ interface Hand {
 }
 
 const HANDS: Hand[] = [
-  // Bonus / modifiers
-  {
-    zh: '自摸', en: 'Self-Draw (Tzi Mo)',
-    faan: '+1 faan',
-    desc: 'Winning by drawing the tile yourself instead of claiming a discard.',
-  },
-  {
-    zh: '門前清自摸', en: 'Concealed Self-Draw',
-    faan: '+1 faan',
-    desc: 'Winning by self-draw with a fully concealed hand (no claimed melds).',
-  },
-  {
-    zh: '槓上花', en: 'After-Kong Draw',
-    faan: '+1 faan',
-    desc: 'Winning on the replacement tile drawn after declaring a kong.',
-  },
-  {
-    zh: '搶槓', en: 'Robbing a Kong',
-    faan: '+1 faan',
-    desc: 'Winning by taking the tile an opponent uses to upgrade a pung to a kong.',
-  },
-  {
-    zh: '海底撈月', en: 'Last Tile from the Sea',
-    faan: '+1 faan',
-    desc: 'Winning on the very last tile drawn from the wall.',
-  },
-  {
-    zh: '花牌', en: 'Flower / Season Tile',
-    faan: '+1 faan each',
-    desc: 'Each flower or season tile scores 1 extra faan. Your own suit flower/season (e.g. East gets 春/梅) scores +1 bonus faan.',
-  },
-
-  // Standard scored hands
-  {
-    zh: '全求人', en: 'All from Discards',
-    faan: '1 faan',
-    desc: 'All four melds are claimed from opponents\' discards (no self-draws). Also known as Chicken Hand if no other patterns apply.',
-  },
-  {
-    zh: '平和', en: 'Common Hand (Ping Wu)',
-    faan: '1 faan',
-    desc: 'Four sequences (chows) and a non-honour pair. Also called All Sequences.',
-  },
-  {
-    zh: '對對胡', en: 'All Pungs (Dui Dui Wu)',
-    faan: '3 faan',
-    desc: 'All four sets are pungs (or kongs) — no sequences. The pair can be anything.',
-  },
-  {
-    zh: '混一色', en: 'Half Flush (Won Yat Sik)',
-    faan: '3 faan',
-    desc: 'All tiles are from a single suit PLUS honour tiles (winds and/or dragons).',
-  },
-  {
-    zh: '小三元', en: 'Small Three Dragons',
-    faan: '3 faan',
-    desc: 'Two pungs/kongs of dragons and a pair of the third dragon.',
-  },
-  {
-    zh: '全帶么', en: 'All Terminals & Honours (Chut Lou)',
-    faan: '4 faan',
-    desc: 'Every set and the pair contain at least one terminal (1 or 9) or honour tile.',
-  },
-  {
-    zh: '大三元', en: 'Big Three Dragons',
-    faan: '8 faan',
-    desc: 'Three pungs or kongs, one of each dragon tile: 中, 發, 白.',
-  },
-  {
-    zh: '小四喜', en: 'Small Four Winds',
-    faan: '8 faan',
-    desc: 'Three pungs/kongs of winds and a pair of the fourth wind.',
-  },
-  {
-    zh: '清一色', en: 'Full Flush (Ching Yat Sik)',
-    faan: '7 faan',
-    desc: 'All tiles are from exactly one suit — no honour tiles.',
-  },
-  {
-    zh: '大四喜', en: 'Big Four Winds',
-    faan: '10 faan (limit)',
-    desc: 'Four pungs or kongs, one of each wind: 東, 南, 西, 北.',
-  },
-  {
-    zh: '字一色', en: 'All Honours',
-    faan: '10 faan (limit)',
-    desc: 'Every tile is an honour — winds and/or dragons only.',
-  },
-  {
-    zh: '清老頭', en: 'All Terminals',
-    faan: '10 faan (limit)',
-    desc: 'Every tile is a terminal (1 or 9 of any suit) — no honours, no middle tiles.',
-  },
-  {
-    zh: '九蓮寶燈', en: 'Nine Gates',
-    faan: '10 faan (limit)',
-    desc: '1-1-1-2-3-4-5-6-7-8-9-9-9 of one suit, plus any one tile of the same suit.',
-  },
-  {
-    zh: '天和', en: 'Heavenly Hand',
-    faan: '10 faan (limit)',
-    desc: 'Dealer wins on the initial deal without drawing or discarding.',
-  },
-  {
-    zh: '地和', en: 'Earthly Hand',
-    faan: '10 faan (limit)',
-    desc: 'Non-dealer wins on the very first discard of the round.',
-  },
-  {
-    zh: '十三么', en: 'Thirteen Orphans',
-    faan: '10 faan (limit)',
-    desc: 'One each of 1-萬, 9-萬, 1-筒, 9-筒, 1-索, 9-索, 東, 南, 西, 北, 中, 發, 白, plus a duplicate of one.',
-  },
-  {
-    zh: '四槓子', en: 'Four Kongs',
-    faan: '10 faan (limit)',
-    desc: 'All four sets are kongs (declared).',
-  },
+  // ── Winning condition bonuses ─────────────────────────────
+  { zh: '自摸', en: 'Self-Draw', faan: '+1 faan',
+    desc: 'Winning by drawing the tile yourself from the wall.' },
+  { zh: '門前清', en: 'Fully Concealed Hand', faan: '+1 faan',
+    desc: 'No open melds until the win. Not applicable to Seven Pairs, Thirteen Orphans, Self Triplets, or Nine Gates.' },
+  { zh: '槓上花', en: 'Win by Kong', faan: '+2 faan',
+    desc: 'Winning on the replacement tile drawn after declaring a kong. Includes the self-pick bonus.' },
+  { zh: '搶槓', en: 'Robbing a Kong', faan: '+1 faan',
+    desc: 'Winning by claiming the tile an opponent adds to upgrade a pung to a kong.' },
+  { zh: '海底撈月', en: 'Last Tile', faan: '+1 faan',
+    desc: 'Winning on the very last tile drawn from the wall or the last discard.' },
+  // ── Regular hands ────────────────────────────────────────
+  { zh: '平和', en: 'Common Hand', faan: '1 faan',
+    desc: 'All four melds are chows (sequences) with a non-honour pair.' },
+  { zh: '對對胡', en: 'All Triplets', faan: '3 faan',
+    desc: 'All four melds are pungs or kongs.' },
+  { zh: '混一色', en: 'Mixed One Suit', faan: '3 faan',
+    desc: 'All tiles from one suit plus honour tiles (winds and/or dragons).' },
+  { zh: '全帶么', en: 'Mixed Orphans', faan: '4 faan',
+    desc: 'Every meld and the pair contain at least one terminal (1 or 9) or honour tile.' },
+  { zh: '七對子', en: 'Seven Pairs', faan: '4 faan',
+    desc: 'The entire hand consists of exactly 7 pairs.' },
+  { zh: '小三元', en: 'Small Three Dragons', faan: '5 faan',
+    desc: 'Pungs/kongs of two dragons and a pair of the third dragon.' },
+  { zh: '小四喜', en: 'Small Four Winds', faan: '6 faan',
+    desc: 'Pungs/kongs of three winds and a pair of the fourth wind.' },
+  { zh: '清一色', en: 'All One Suit', faan: '7 faan',
+    desc: 'All tiles from exactly one suit — no honour tiles.' },
+  { zh: '大三元', en: 'Great Dragons', faan: '8 faan',
+    desc: 'Pungs or kongs of all three dragons: 中, 發, 白.' },
+  // ── Capped hands (no wind/flower faan added on top) ──────
+  { zh: '字一色', en: 'All Honours', faan: '10 faan (capped)',
+    desc: 'All tiles are honour tiles (winds and/or dragons). Wind and flower bonuses not added.' },
+  { zh: '全暗刻', en: 'Self Triplets', faan: '10 faan (capped)',
+    desc: 'All four melds are concealed pungs or kongs, won by self-pick or the pair is the winning discard.' },
+  { zh: '清老頭', en: 'Orphans', faan: '10 faan (capped)',
+    desc: 'All four melds are pungs or kongs of terminals (1s and 9s only).' },
+  { zh: '九蓮寶燈', en: 'Nine Gates', faan: '10 faan (capped)',
+    desc: 'Fully concealed, one suit: 1-1-1-2-3-4-5-6-7-8-9-9-9 plus any tile of the same suit.' },
+  { zh: '大四喜', en: 'Great Winds', faan: '13 faan (limit)',
+    desc: 'Pungs or kongs of all four winds: 東, 南, 西, 北.' },
+  { zh: '十三么', en: 'Thirteen Orphans', faan: '13 faan (limit)',
+    desc: 'One of each terminal and honour tile (1/9 of each suit + 4 winds + 3 dragons) plus one duplicate.' },
+  { zh: '四槓子', en: 'All Kongs', faan: '13 faan (limit)',
+    desc: 'All four sets are declared kongs.' },
+  { zh: '天和', en: 'Heavenly Hand', faan: '13 faan (limit)',
+    desc: 'Dealer wins with the initial 14-tile dealt hand.' },
+  { zh: '地和', en: 'Earthly Hand', faan: '13 faan (limit)',
+    desc: "Non-dealer wins on the dealer's very first discard." },
 ];
 
 // ─── Points table ─────────────────────────────────────────────────
 const POINTS_TABLE = [
-  { faan: 1, base: 1 },
-  { faan: 2, base: 2 },
-  { faan: 3, base: 4 },
-  { faan: 4, base: 8 },
-  { faan: 5, base: 16 },
-  { faan: 6, base: 32 },
-  { faan: 7, base: 64 },
-  { faan: 8, base: 128 },
-  { faan: 9, base: 256 },
-  { faan: '10+ (limit)', base: 512 },
+  { faan: '< 3', base: 0 },
+  { faan: 3, base: 1 },
+  { faan: '4 – 6', base: 2 },
+  { faan: '7 – 9', base: 4 },
+  { faan: '10 – 13 (limit)', base: 8 },
 ];
 
 // ─── Sub-components ───────────────────────────────────────────────
@@ -279,9 +205,11 @@ function HandsTab() {
             <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-full ${
               hand.faan.includes('limit')
                 ? 'bg-red-100 text-red-700'
-                : hand.faan.startsWith('+')
-                  ? 'bg-amber-100 text-amber-700'
-                  : 'bg-blue-100 text-blue-700'
+                : hand.faan.includes('capped')
+                  ? 'bg-orange-100 text-orange-700'
+                  : hand.faan.startsWith('+')
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-blue-100 text-blue-700'
             }`}>
               {hand.faan}
             </span>
@@ -297,7 +225,7 @@ function PointsTab() {
   return (
     <div>
       <p className="text-xs text-gray-500 mb-4 bg-amber-50 rounded-xl p-3 border border-amber-200">
-        Base points are paid per player. For a discard win the loser pays the winner the base points. For self-draw (自摸) each of the other three players pays the base points.
+        Minimum 3 faan to win. Base points double for self-pick (all pay ×2), winner is East (all pay ×2), or a loser is East (that loser pays ×2). Conditions stack multiplicatively.
       </p>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -306,11 +234,13 @@ function PointsTab() {
           <span className="text-xs font-bold text-gray-500 uppercase tracking-wide text-right">Base Points</span>
         </div>
         {POINTS_TABLE.map(({ faan, base }) => (
-          <div key={String(faan)} className="grid grid-cols-2 px-4 py-3 border-b border-gray-50 last:border-0 hover:bg-gray-50">
-            <span className={`font-semibold ${String(faan).includes('limit') ? 'text-red-600' : 'text-gray-900'}`}>
-              {String(faan).includes('limit') ? `${faan}` : `${faan} 番`}
+          <div key={String(faan)} className={`grid grid-cols-2 px-4 py-3 border-b border-gray-50 last:border-0 ${String(faan) === '< 3' ? 'bg-red-50' : 'hover:bg-gray-50'}`}>
+            <span className={`font-semibold ${String(faan).includes('limit') ? 'text-red-600' : String(faan) === '< 3' ? 'text-red-500' : 'text-gray-900'}`}>
+              {String(faan).includes('limit') ? faan : `${faan} 番`}
             </span>
-            <span className="font-bold text-right text-blue-700">{base}</span>
+            <span className={`font-bold text-right ${base === 0 ? 'text-red-400' : 'text-blue-700'}`}>
+              {base === 0 ? 'Cannot win' : base}
+            </span>
           </div>
         ))}
       </div>
@@ -318,26 +248,84 @@ function PointsTab() {
       <div className="mt-4 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <h3 className="text-xs font-bold uppercase tracking-widest text-red-600 mb-3">Scoring Example</h3>
         <p className="text-xs text-gray-600 leading-relaxed">
-          <strong>5-faan discard win:</strong> base = 16 pts. The player who discarded pays 16 pts to the winner. Others pay nothing.
+          <strong>5-faan discard win:</strong> base = 2 pts. Discarder pays 2×2 = 4 pts. Others pay nothing.
         </p>
         <p className="text-xs text-gray-600 leading-relaxed mt-2">
-          <strong>5-faan self-draw:</strong> base = 16 pts. Each of the other 3 players pays 16 pts → winner gains 48 pts total.
+          <strong>5-faan self-draw:</strong> base = 2 pts. All 3 others pay 2×2 = 4 pts each → winner gains 12 pts.
         </p>
         <p className="text-xs text-gray-600 leading-relaxed mt-2">
-          <strong>Dealer bonus:</strong> Many tables double points when the dealer wins. Ask your host.
+          <strong>East wins self-draw:</strong> add ×2 again → 4×2 = 8 pts per loser (winner gains 24 pts).
         </p>
       </div>
     </div>
   );
 }
+function WindsTab() {
+  return (
+    <div>
+      <Section title="Prevailing Wind 圈風">
+        <div className="py-2">
+          <p className="text-sm text-gray-600 mb-3 leading-relaxed">
+            A full session has 4 rounds. The round advances once all 4 players have been the dealer.
+          </p>
+          <div className="flex items-center justify-around bg-red-50 rounded-lg p-3 mb-1">
+            {['東', '南', '西', '北'].map((w, i) => (
+              <span key={w} className="flex items-center gap-1">
+                <span className="text-xl font-bold text-red-700">{w}</span>
+                {i < 3 && <span className="text-gray-400 text-sm">→</span>}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 text-center">East → South → West → North</p>
+        </div>
+      </Section>
 
+      <Section title="Dealer Change Rules">
+        <div className="space-y-2 py-2">
+          <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+            <p className="text-sm font-semibold text-green-800 mb-0.5">Dealer wins — or — Draw 流局</p>
+            <p className="text-xs text-gray-600">Seats do not change. Dealer (東) keeps their seat and deals again.</p>
+          </div>
+          <div className="bg-amber-50 rounded-lg p-3 border border-amber-200">
+            <p className="text-sm font-semibold text-amber-800 mb-0.5">Non-dealer wins</p>
+            <p className="text-xs text-gray-600">Seats rotate <strong>counter-clockwise</strong>: South → East (new dealer) · West → South · North → West · East → North.</p>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Seat, Flower & Season Numbers">
+        <Row label="東 East — Seat #1" value="梅 Plum · 春 Spring" />
+        <Row label="南 South — Seat #2" value="蘭 Orchid · 夏 Summer" />
+        <Row label="西 West — Seat #3" value="菊 Chrysanthemum · 秋 Autumn" />
+        <Row label="北 North — Seat #4" value="竹 Bamboo · 冬 Winter" />
+      </Section>
+
+      <Section title="Wind & Dragon Faan Bonuses">
+        <Row label="Pung of your seat wind" value="+1 faan" />
+        <Row label="Pung of prevailing wind" value="+1 faan" />
+        <Row label="Double wind (seat = prevailing)" value="+2 faan" sub="replaces both +1s" />
+        <Row label="Pung of 中 Red Dragon" value="+1 faan" />
+        <Row label="Pung of 發 Green Dragon" value="+1 faan" />
+        <Row label="Pung of 白 White Dragon" value="+1 faan" />
+      </Section>
+
+      <Section title="Flower & Season Faan Bonuses">
+        <Row label="No bonus tiles at all" value="+1 faan" sub="NO_FLOWERS bonus" />
+        <Row label="Own flower matches your seat" value="+1 faan" sub="e.g. East → 梅" />
+        <Row label="Own season matches your seat" value="+1 faan" sub="e.g. East → 春" />
+        <Row label="All 4 flowers (梅蘭菊竹)" value="+2 faan" sub="flat bonus, not per-tile" />
+        <Row label="All 4 seasons (春夏秋冬)" value="+2 faan" sub="flat bonus, not per-tile" />
+      </Section>
+    </div>
+  );
+}
 // ─── Main overlay ─────────────────────────────────────────────────
 interface InfoPageProps {
   onClose: () => void;
 }
 
 export function InfoPage({ onClose }: InfoPageProps) {
-  const [tab, setTab] = useState<Tab>('Translations');
+  const [tab, setTab] = useState<Tab>('Tiles');
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex flex-col">
@@ -372,9 +360,10 @@ export function InfoPage({ onClose }: InfoPageProps) {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
-        {tab === 'Translations' && <TranslationsTab />}
+        {tab === 'Tiles' && <TranslationsTab />}
         {tab === 'Hands' && <HandsTab />}
-        {tab === 'Points Table' && <PointsTab />}
+        {tab === 'Points' && <PointsTab />}
+        {tab === 'Winds' && <WindsTab />}
       </div>
     </div>
   );

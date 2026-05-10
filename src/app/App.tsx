@@ -5,7 +5,7 @@ import { TileInput } from './components/TileInput';
 import { HandSubmission } from './components/HandSubmission';
 import { ScoringScreen } from './components/ScoringScreen';
 import { FinalScoresScreen } from './components/FinalScoresScreen';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
 interface Player {
   name: string;
@@ -23,6 +23,8 @@ interface Party {
   scores: { [name: string]: number };
   winData: { claimedBy: string; timestamp: number } | null;
   submissions: { [name: string]: { tiles: string[]; timestamp: number } };
+  prevailingWind: string;
+  dealerChanges: number;
 }
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a83e0fd9`;
@@ -204,7 +206,7 @@ export default function App() {
   };
 
   // Submit hand
-  const handleHandSubmit = async (tiles: string[]) => {
+  const handleHandSubmit = async (tiles: string[], bonusTiles: string[], kongs: string[]) => {
     if (!partyCode || !playerName) return;
 
     try {
@@ -214,7 +216,7 @@ export default function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify({ playerName, tiles })
+        body: JSON.stringify({ playerName, tiles, bonusTiles, kongs })
       });
 
       const data = await response.json();
@@ -276,7 +278,7 @@ export default function App() {
   };
 
   // Record score
-  const handleScoreSubmit = async (winnerName: string, loserName: string | null, fan: number, isSelfDrawn: boolean) => {
+  const handleScoreSubmit = async (winnerName: string, loserName: string | null, fan: number, isSelfDrawn: boolean, isDraw: boolean) => {
     if (!partyCode) return;
 
     try {
@@ -286,7 +288,7 @@ export default function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${publicAnonKey}`
         },
-        body: JSON.stringify({ winnerName, loserName, fan, isSelfDrawn })
+        body: JSON.stringify({ winnerName, loserName, fan, isSelfDrawn, isDraw })
       });
 
       const data = await response.json();
@@ -363,6 +365,7 @@ export default function App() {
       <TileInput
         playerName={playerName}
         position={currentPlayer.position}
+        prevailingWind={party.prevailingWind || '東'}
         isHost={isHost}
         onWinClaimed={handleWinClaimed}
         onTilesUpdate={handleTilesUpdate}
@@ -380,6 +383,7 @@ export default function App() {
       <HandSubmission
         playerName={playerName}
         position={currentPlayer.position}
+        prevailingWind={party.prevailingWind || '東'}
         claimedBy={party.winData.claimedBy}
         currentTiles={currentPlayer.tiles}
         hasSubmitted={hasSubmitted}
@@ -396,6 +400,8 @@ export default function App() {
         claimedBy={party.winData.claimedBy}
         currentScores={party.scores}
         round={party.round}
+        prevailingWind={party.prevailingWind || '東'}
+        dealerName={party.players.find(p => p.position === '東')?.name || party.host}
         onScoreSubmit={handleScoreSubmit}
       />
     );
