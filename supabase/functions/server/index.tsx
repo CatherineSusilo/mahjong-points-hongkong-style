@@ -428,6 +428,89 @@ app.post("/make-server-a83e0fd9/party/:code/start-round", async (c) => {
   }
 });
 
+// Swap positions of two non-host players (host only, during lobby)
+app.post("/make-server-a83e0fd9/party/:code/swap-positions", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { hostName, playerA, playerB } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    if (party.host !== hostName) {
+      return c.json({ success: false, error: 'Only host can swap positions' }, 403);
+    }
+
+    if (party.state !== 'lobby') {
+      return c.json({ success: false, error: 'Can only swap positions in lobby' }, 400);
+    }
+
+    const pA = party.players.find((p: any) => p.name === playerA);
+    const pB = party.players.find((p: any) => p.name === playerB);
+
+    if (!pA || !pB) {
+      return c.json({ success: false, error: 'Player not found' }, 404);
+    }
+
+    // Swap the wind positions between the two players
+    const tmp = pA.position;
+    pA.position = pB.position;
+    pB.position = tmp;
+
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`Swapped positions of ${playerA} and ${playerB} in party ${partyCode}`);
+
+    return c.json({ success: true, party });
+  } catch (error) {
+    console.error('Error swapping positions:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+// Leave the lobby (any player, lobby state only)
+app.post("/make-server-a83e0fd9/party/:code/leave", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { playerName } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    if (party.state !== 'lobby') {
+      return c.json({ success: false, error: 'Can only leave during lobby' }, 400);
+    }
+
+    // If host leaves, disband the entire party
+    if (party.host === playerName) {
+      await kv.set(`party:${partyCode}`, { ...party, state: 'disbanded' });
+      console.log(`Party ${partyCode} disbanded — host ${playerName} left`);
+      return c.json({ success: true, disbanded: true });
+    }
+
+    // Non-host: remove player and compact positions
+    party.players = party.players.filter((p: any) => p.name !== playerName);
+    delete party.scores[playerName];
+
+    const seatOrder = ['東', '南', '西', '北'];
+    party.players.sort((a: any, b: any) => seatOrder.indexOf(a.position) - seatOrder.indexOf(b.position));
+    party.players.forEach((p: any, i: number) => {
+      p.position = seatOrder[i];
+    });
+
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`${playerName} left party ${partyCode}`);
+
+    return c.json({ success: true, disbanded: false, party });
+  } catch (error) {
+    console.error('Error leaving party:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
 // Kick a player from the party (host only, during lobby)
 app.post("/make-server-a83e0fd9/party/:code/kick", async (c) => {
   try {
@@ -450,10 +533,12 @@ app.post("/make-server-a83e0fd9/party/:code/kick", async (c) => {
     party.players = party.players.filter((p: any) => p.name !== playerName);
     delete party.scores[playerName];
 
-    // Reassign positions after kick
-    const positions = ['東', '南', '西', '北'];
+    // Reassign positions — sort remaining players by their current ESWN order first
+    // so any custom swaps are preserved as much as possible
+    const seatOrder = ['東', '南', '西', '北'];
+    party.players.sort((a: any, b: any) => seatOrder.indexOf(a.position) - seatOrder.indexOf(b.position));
     party.players.forEach((p: any, i: number) => {
-      p.position = positions[i];
+      p.position = seatOrder[i];
     });
 
     await kv.set(`party:${partyCode}`, party);

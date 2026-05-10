@@ -1,5 +1,7 @@
-import { Users, Crown, Copy, Check, X } from 'lucide-react';
+import { Users, Crown, Copy, Check, X, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+
+const SEAT_ORDER = ['東', '南', '西', '北'] as const;
 
 interface Player {
   name: string;
@@ -10,12 +12,15 @@ interface Player {
 interface PartyLobbyProps {
   partyCode: string;
   players: Player[];
+  hostName: string;
   isHost: boolean;
   onStartGame: () => void;
   onKickPlayer: (name: string) => void;
+  onSwapPositions: (playerA: string, playerB: string) => void;
+  onLeaveLobby: () => void;
 }
 
-export function PartyLobby({ partyCode, players, isHost, onStartGame, onKickPlayer }: PartyLobbyProps) {
+export function PartyLobby({ partyCode, players, hostName, isHost, onStartGame, onKickPlayer, onSwapPositions, onLeaveLobby }: PartyLobbyProps) {
   const [copied, setCopied] = useState(false);
 
   const copyCode = () => {
@@ -25,6 +30,16 @@ export function PartyLobby({ partyCode, players, isHost, onStartGame, onKickPlay
   };
 
   const canStart = players.length >= 3;
+
+  // Sort by ESWN seat order for display
+  const sortedPlayers = [...players].sort(
+    (a, b) => SEAT_ORDER.indexOf(a.position as typeof SEAT_ORDER[number]) - SEAT_ORDER.indexOf(b.position as typeof SEAT_ORDER[number])
+  );
+  // Non-host players in seat order (host is always 東 / first)
+  const nonHostPlayers = sortedPlayers.filter(p => p.name !== hostName);
+
+  const filledPositions = sortedPlayers.length;
+  const emptyPositions = SEAT_ORDER.slice(filledPositions);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-amber-50 flex items-center justify-center p-4">
@@ -58,43 +73,73 @@ export function PartyLobby({ partyCode, players, isHost, onStartGame, onKickPlay
             Players ({players.length}/4)
           </p>
           <div className="space-y-2">
-            {players.map((player, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between bg-gray-50 rounded-lg p-3"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold text-sm">
-                    {player.position}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-900 flex items-center gap-2">
-                      {player.name}
-                      {index === 0 && <Crown className="w-4 h-4 text-amber-500" />}
+            {sortedPlayers.map((player) => {
+              const isThisHost = player.name === hostName;
+              const nonHostIdx = nonHostPlayers.indexOf(player);
+              const canMoveUp = !isThisHost && nonHostIdx > 0;
+              const canMoveDown = !isThisHost && nonHostIdx < nonHostPlayers.length - 1;
+
+              return (
+                <div
+                  key={player.name}
+                  className="flex items-center justify-between bg-gray-50 rounded-lg p-3"
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Reorder arrows for non-host players (host view only) */}
+                    {isHost && !isThisHost && (
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          onClick={() => canMoveUp && onSwapPositions(player.name, nonHostPlayers[nonHostIdx - 1].name)}
+                          disabled={!canMoveUp}
+                          className={`p-0.5 rounded transition-colors ${
+                            canMoveUp ? 'text-gray-500 hover:text-gray-900 hover:bg-gray-200' : 'text-gray-200 cursor-not-allowed'
+                          }`}
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => canMoveDown && onSwapPositions(player.name, nonHostPlayers[nonHostIdx + 1].name)}
+                          disabled={!canMoveDown}
+                          className={`p-0.5 rounded transition-colors ${
+                            canMoveDown ? 'text-gray-500 hover:text-gray-900 hover:bg-gray-200' : 'text-gray-200 cursor-not-allowed'
+                          }`}
+                        >
+                          <ChevronDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="bg-red-100 text-red-600 px-3 py-1 rounded-full font-bold text-sm">
+                      {player.position}
                     </div>
-                    {index === 0 && <div className="text-xs text-gray-500">Host</div>}
+                    <div>
+                      <div className="font-semibold text-gray-900 flex items-center gap-2">
+                        {player.name}
+                        {isThisHost && <Crown className="w-4 h-4 text-amber-500" />}
+                      </div>
+                      {isThisHost && <div className="text-xs text-gray-500">Host</div>}
+                    </div>
                   </div>
+                  {isHost && !isThisHost && (
+                    <button
+                      onClick={() => onKickPlayer(player.name)}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                      Kick
+                    </button>
+                  )}
                 </div>
-                {isHost && index > 0 && (
-                  <button
-                    onClick={() => onKickPlayer(player.name)}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                    Kick
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
 
             {/* Empty Slots */}
-            {Array.from({ length: 4 - players.length }).map((_, index) => (
+            {emptyPositions.map((pos) => (
               <div
-                key={`empty-${index}`}
+                key={pos}
                 className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 border-2 border-dashed border-gray-200"
               >
                 <div className="bg-gray-200 text-gray-400 px-3 py-1 rounded-full font-bold text-sm">
-                  {['東', '南', '西', '北'][players.length + index]}
+                  {pos}
                 </div>
                 <div className="text-sm text-gray-400">Waiting for player...</div>
               </div>
@@ -123,6 +168,14 @@ export function PartyLobby({ partyCode, players, isHost, onStartGame, onKickPlay
             <p className="text-sm text-blue-900 font-medium">Waiting for host to start...</p>
           </div>
         )}
+
+        {/* Leave Lobby */}
+        <button
+          onClick={onLeaveLobby}
+          className="w-full mt-3 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 py-2 rounded-xl transition-colors"
+        >
+          {isHost ? 'Disband Lobby' : 'Leave Lobby'}
+        </button>
       </div>
     </div>
   );

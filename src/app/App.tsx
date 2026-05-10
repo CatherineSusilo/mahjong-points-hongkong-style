@@ -20,7 +20,7 @@ interface Party {
   code: string;
   host: string;
   players: Player[];
-  state: 'lobby' | 'playing' | 'submitting' | 'scoring' | 'score_summary' | 'round_start' | 'ended';
+  state: 'lobby' | 'playing' | 'submitting' | 'scoring' | 'score_summary' | 'round_start' | 'ended' | 'disbanded';
   round: number;
   scores: { [name: string]: number };
   winData: { claimedBy: string; timestamp: number } | null;
@@ -39,12 +39,24 @@ interface Party {
 
 const API_URL = `https://${projectId}.supabase.co/functions/v1/make-server-a83e0fd9`;
 
+// Safe JSON parse: returns parsed data or throws with readable message
+async function safeJson(response: Response): Promise<any> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Server error ${response.status}: ${text.substring(0, 120)}`);
+  }
+}
+
 export default function App() {
   const [partyCode, setPartyCode] = useState<string | null>(null);
   const [playerName, setPlayerName] = useState<string | null>(null);
   const [party, setParty] = useState<Party | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isKicked, setIsKicked] = useState(false);
+  const [isDisbanded, setIsDisbanded] = useState(false);
 
   // Fetch party state
   const fetchParty = useCallback(async () => {
@@ -64,9 +76,16 @@ export default function App() {
           if (!stillInParty) {
             setPartyCode(null);
             setParty(null);
-            setError('You were removed from the party by the host.');
+            setIsKicked(true);
             return;
           }
+        }
+        // Detect if the lobby was disbanded (host left)
+        if (data.party.state === 'disbanded') {
+          setPartyCode(null);
+          setParty(null);
+          setIsDisbanded(true);
+          return;
         }
         setParty(data.party);
         setError(null);
@@ -253,13 +272,62 @@ export default function App() {
         body: JSON.stringify({ playerName: kickedPlayerName, hostName: playerName })
       });
 
-      const data = await response.json();
+      const data = await safeJson(response);
 
       if (data.success) {
         setParty(data.party);
       }
     } catch (err) {
       console.error('Error kicking player:', err);
+      alert('Could not kick player — please check your connection.');
+    }
+  };
+
+  // Leave lobby
+  const handleLeaveLobby = async () => {
+    if (!partyCode || !playerName) return;
+
+    try {
+      const response = await fetch(`${API_URL}/party/${partyCode}/leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ playerName })
+      });
+
+      const data = await safeJson(response);
+      if (data.success) {
+        // Clear local state — player left voluntarily
+        setPartyCode(null);
+        setParty(null);
+        setPlayerName(null);
+      }
+    } catch (err) {
+      console.error('Error leaving party:', err);
+      alert('Could not leave — please check your connection.');
+    }
+  };
+
+  // Swap positions of two non-host players (host only, lobby)
+  const handleSwapPositions = async (playerA: string, playerB: string) => {
+    if (!partyCode || !playerName) return;
+
+    try {
+      const response = await fetch(`${API_URL}/party/${partyCode}/swap-positions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ hostName: playerName, playerA, playerB })
+      });
+
+      const data = await response.json();
+      if (data.success) setParty(data.party);
+    } catch (err) {
+      console.error('Error swapping positions:', err);
     }
   };
 
@@ -353,6 +421,58 @@ export default function App() {
     }
   };
 
+  // Kicked screen — shown before error so it takes priority
+  if (isKicked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-amber-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+          <div className="bg-red-100 p-4 rounded-full inline-block mb-4">
+            <span className="text-4xl">🚪</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">You were kicked</h2>
+          <p className="text-gray-600 mb-6">The host removed you from the party.</p>
+          <button
+            onClick={() => {
+              setIsKicked(false);
+              setPartyCode(null);
+              setPlayerName(null);
+              setParty(null);
+            }}
+            className="w-full bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 transition-colors"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Disbanded screen
+  if (isDisbanded) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-amber-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+          <div className="bg-gray-100 p-4 rounded-full inline-block mb-4">
+            <span className="text-4xl">🔒</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Lobby disbanded</h2>
+          <p className="text-gray-600 mb-6">The host left, so the party has been closed.</p>
+          <button
+            onClick={() => {
+              setIsDisbanded(false);
+              setPartyCode(null);
+              setPlayerName(null);
+              setParty(null);
+            }}
+            className="w-full bg-gray-700 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors"
+          >
+            Back to Home
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Error display
   if (error) {
     return (
@@ -404,9 +524,12 @@ export default function App() {
       <PartyLobby
         partyCode={party.code}
         players={party.players}
+        hostName={party.host}
         isHost={isHost}
         onStartGame={handleStartGame}
         onKickPlayer={handleKickPlayer}
+        onSwapPositions={handleSwapPositions}
+        onLeaveLobby={handleLeaveLobby}
       />
     );
   }

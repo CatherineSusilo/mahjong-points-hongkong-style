@@ -31,8 +31,8 @@ export function PartyEntry({ onCreateParty, onJoinParty }: PartyEntryProps) {
             <div className="bg-red-600 p-4 rounded-2xl inline-block mb-4">
               <Users className="w-12 h-12 text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">HK Mahjong Counter</h1>
-            <p className="text-gray-600">Multi-device score tracking</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Hong Kong Mahjong Counter</h1>
+            <p className="text-gray-600">The score tracking app for Hong Kong/Cantonese Mahjong version <br/> This app is made for 3-4 players, make sure each player sits according to in-game positions.</p>
           </div>
 
           <div className="space-y-3">
