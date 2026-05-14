@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Trophy } from 'lucide-react';
+import { TrendingUp, TrendingDown, Trophy, Crown } from 'lucide-react';
 
 interface Player { name: string; position: string; }
 
@@ -19,13 +19,17 @@ interface ScoreSummaryScreenProps {
   dealerName: string;
   scoreData: ScoreData;
   isHost: boolean;
-  onContinue: () => void;
+  onStartRound: () => void;
 }
 
 export function ScoreSummaryScreen({
-  players, scores, round, prevailingWind, dealerName, scoreData, isHost, onContinue,
+  players, scores, round, prevailingWind, dealerName, scoreData, isHost, onStartRound,
 }: ScoreSummaryScreenProps) {
   const { winnerName, loserName, fan, isSelfDrawn, isDraw, changes } = scoreData;
+
+  const sortedPlayers = [...players].sort(
+    (a, b) => (scores[b.name] ?? 0) - (scores[a.name] ?? 0),
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 p-4">
@@ -94,17 +98,48 @@ export function ScoreSummaryScreen({
           </div>
         </div>
 
-        {/* Continue */}
+        {/* Standings leaderboard */}
+        <div className="bg-white rounded-xl shadow-lg p-4 mb-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Standings</p>
+          <div className="space-y-2">
+            {sortedPlayers.map((player, idx) => {
+              const score = scores[player.name] ?? 0;
+              const isDealer = player.name === dealerName;
+              return (
+                <div
+                  key={player.name}
+                  className="bg-gray-50 rounded-lg px-3 py-2.5 flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      idx === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-600'
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <span className="font-medium text-gray-900">{player.name}</span>
+                    <span className="text-xs text-gray-400">{player.position}</span>
+                    {isDealer && <Crown className="w-3.5 h-3.5 text-amber-500" />}
+                  </div>
+                  <span className={`font-bold text-sm ${score >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {score}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Start next round */}
         {isHost ? (
           <button
-            onClick={onContinue}
-            className="w-full bg-gradient-to-r from-purple-600 to-purple-700 text-white py-4 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg"
+            onClick={onStartRound}
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-emerald-700 transition-all shadow-lg"
           >
-            Continue to Round {round}
+            Start Round {round}
           </button>
         ) : (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-            <p className="text-amber-800 font-semibold text-sm">Waiting for host to start the next round…</p>
+            <p className="text-amber-800 font-semibold text-sm">Waiting for host to start round {round}…</p>
           </div>
         )}
       </div>

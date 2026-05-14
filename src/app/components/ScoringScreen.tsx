@@ -31,6 +31,7 @@ export function ScoringScreen({
   const [loserName, setLoserName] = useState<string | null>(null);
   const [isSelfDrawn, setIsSelfDrawn] = useState(false);
   const [isConcealed, setIsConcealed] = useState(false);
+  const [isLastTile, setIsLastTile] = useState(false);
 
   // Auto-detect from winner's submitted hand
   const winner = players.find(p => p.name === claimedBy);
@@ -44,9 +45,12 @@ export function ScoringScreen({
   const bonusFaan = computeFlowerFaan(sub.bonusTiles, seatNum);
   const isCapped = patterns[0]?.isCapped ?? false;
   const patternFaan = patterns.reduce((s, p) => s + p.faan, 0);
-  const concealedFaan = !isCapped && isConcealed ? 1 : 0;
-  const fan = Math.min(13, patternFaan + (isCapped ? 0 : wdFaan + bonusFaan + concealedFaan));
   const hasNoTiles = sub.tiles.length === 0 && sub.kongs.length === 0;
+  const concealedFaan = !isCapped && isConcealed ? 1 : 0;
+  // No flowers/seasons submitted by winner → +1 (only when hand is actually submitted)
+  const noFlowerFaan = !isCapped && !hasNoTiles && sub.bonusTiles.length === 0 ? 1 : 0;
+  const lastTileFaan = !isCapped && isLastTile ? 1 : 0;
+  const fan = Math.min(13, patternFaan + (isCapped ? 0 : wdFaan + bonusFaan + noFlowerFaan + concealedFaan + lastTileFaan));
   const allPlayersSubmitted = players.every(p => !!submissions[p.name]);
 
   const handleSubmit = () => {
@@ -94,13 +98,25 @@ export function ScoringScreen({
               <span>+{bonusFaan}番</span>
             </div>
           )}
+          {!isCapped && noFlowerFaan > 0 && (
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>無花 No Bonus Tiles</span>
+              <span>+1番</span>
+            </div>
+          )}
           {!isCapped && isConcealed && (
             <div className="flex justify-between text-sm text-gray-600">
               <span>門前清 Concealed Hand</span>
               <span>+1番</span>
             </div>
           )}
-          {isCapped && (bonusFaan > 0 || wdFaan > 0 || isConcealed) && (
+          {!isCapped && lastTileFaan > 0 && (
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>海底 Last Tile Draw</span>
+              <span>+1番</span>
+            </div>
+          )}
+          {isCapped && (bonusFaan > 0 || wdFaan > 0 || isConcealed || noFlowerFaan > 0 || lastTileFaan > 0) && (
             <p className="text-xs text-gray-400 italic">Wind / dragon / flower bonuses not added (capped hand)</p>
           )}
           <div className="border-t border-gray-200 pt-2 flex justify-between font-bold">
@@ -161,9 +177,9 @@ export function ScoringScreen({
         {/* Winner + Auto-detected hand */}
         <HandBreakdown />
 
-        {/* Concealed toggle */}
+        {/* Concealed + Last Tile toggles */}
         {!isCapped && !hasNoTiles && (
-          <div className="bg-white rounded-xl shadow-lg px-4 py-3 mb-4">
+          <div className="bg-white rounded-xl shadow-lg px-4 py-3 mb-4 space-y-3">
             <button
               onClick={() => setIsConcealed(c => !c)}
               className="w-full flex items-center justify-between"
@@ -172,6 +188,18 @@ export function ScoringScreen({
                 門前清 Concealed Hand <span className="text-gray-400 font-normal">(+1番)</span>
               </span>
               <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${isConcealed ? 'bg-blue-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                <div className="w-4 h-4 bg-white rounded-full shadow" />
+              </div>
+            </button>
+            <div className="border-t border-gray-100" />
+            <button
+              onClick={() => setIsLastTile(v => !v)}
+              className="w-full flex items-center justify-between"
+            >
+              <span className="text-sm font-medium text-gray-700">
+                海底 Last Tile Draw <span className="text-gray-400 font-normal">(+1番)</span>
+              </span>
+              <div className={`w-10 h-5 rounded-full transition-colors flex items-center px-0.5 ${isLastTile ? 'bg-blue-500 justify-end' : 'bg-gray-300 justify-start'}`}>
                 <div className="w-4 h-4 bg-white rounded-full shadow" />
               </div>
             </button>

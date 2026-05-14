@@ -1,4 +1,6 @@
 import { useState } from 'react';
+const _handImgs = import.meta.glob('./hands/*.PNG', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+const handImg = (file: string): string => _handImgs[`./hands/${file}`] ?? '';
 import { X } from 'lucide-react';
 
 const TABS = ['Tiles', 'Hands', 'Points', 'Winds'] as const;
@@ -56,6 +58,7 @@ interface Hand {
   en: string;
   faan: string;
   desc: string;
+  img?: string;
 }
 
 const HANDS: Hand[] = [
@@ -72,38 +75,38 @@ const HANDS: Hand[] = [
     desc: 'Winning on the very last tile drawn from the wall or the last discard.' },
   // ── Regular hands ────────────────────────────────────────
   { zh: '平和', en: 'Common Hand', faan: '1 faan',
-    desc: 'All four melds are chows (sequences) with a non-honour pair.' },
+    desc: 'All four melds are chows (sequences) with a non-honour pair.', img: 'common-hand.PNG' },
   { zh: '對對胡', en: 'All Triplets', faan: '3 faan',
-    desc: 'All four melds are pungs or kongs.' },
+    desc: 'All four melds are pungs or kongs.', img: 'all-triplets.PNG' },
   { zh: '混一色', en: 'Mixed One Suit', faan: '3 faan',
-    desc: 'All tiles from one suit plus honour tiles (winds and/or dragons).' },
+    desc: 'All tiles from one suit plus honour tiles (winds and/or dragons).', img: 'mixed-one-suit.PNG' },
   { zh: '全帶么', en: 'Mixed Orphans', faan: '4 faan',
     desc: 'Every meld and the pair contain at least one terminal (1 or 9) or honour tile.' },
   { zh: '七對子', en: 'Seven Pairs', faan: '4 faan',
-    desc: 'The entire hand consists of exactly 7 pairs.' },
+    desc: 'The entire hand consists of exactly 7 pairs.', img: 'seven-pairs.PNG' },
   { zh: '小三元', en: 'Small Three Dragons', faan: '5 faan',
-    desc: 'Pungs/kongs of two dragons and a pair of the third dragon.' },
+    desc: 'Pungs/kongs of two dragons and a pair of the third dragon.', img: 'small-three-dragons.PNG' },
   { zh: '小四喜', en: 'Small Four Winds', faan: '6 faan',
-    desc: 'Pungs/kongs of three winds and a pair of the fourth wind.' },
+    desc: 'Pungs/kongs of three winds and a pair of the fourth wind.', img: 'small-four-winds.PNG' },
   { zh: '清一色', en: 'All One Suit', faan: '7 faan',
-    desc: 'All tiles from exactly one suit — no honour tiles.' },
+    desc: 'All tiles from exactly one suit — no honour tiles.', img: 'all-one-suit.PNG' },
   { zh: '大三元', en: 'Great Dragons', faan: '8 faan',
-    desc: 'Pungs or kongs of all three dragons: 中, 發, 白.' },
+    desc: 'Pungs or kongs of all three dragons: 中, 發, 白.', img: 'great-dragons.PNG' },
   // ── Capped hands (no wind/flower faan added on top) ──────
   { zh: '字一色', en: 'All Honours', faan: '10 faan (capped)',
-    desc: 'All tiles are honour tiles (winds and/or dragons). Wind and flower bonuses not added.' },
+    desc: 'All tiles are honour tiles (winds and/or dragons). Wind and flower bonuses not added.', img: 'all-honours.PNG' },
   { zh: '全暗刻', en: 'Self Triplets', faan: '10 faan (capped)',
-    desc: 'All four melds are concealed pungs or kongs, won by self-pick or the pair is the winning discard.' },
+    desc: 'All four melds are concealed pungs or kongs, won by self-pick or the pair is the winning discard.', img: 'self-triplets.PNG' },
   { zh: '清老頭', en: 'Orphans', faan: '10 faan (capped)',
-    desc: 'All four melds are pungs or kongs of terminals (1s and 9s only).' },
+    desc: 'All four melds are pungs or kongs of terminals (1s and 9s only).', img: 'orphans.PNG' },
   { zh: '九蓮寶燈', en: 'Nine Gates', faan: '10 faan (capped)',
-    desc: 'Fully concealed, one suit: 1-1-1-2-3-4-5-6-7-8-9-9-9 plus any tile of the same suit.' },
+    desc: 'Fully concealed, one suit: 1-1-1-2-3-4-5-6-7-8-9-9-9 plus any tile of the same suit.', img: 'none-gates.PNG' },
   { zh: '大四喜', en: 'Great Winds', faan: '13 faan (limit)',
-    desc: 'Pungs or kongs of all four winds: 東, 南, 西, 北.' },
+    desc: 'Pungs or kongs of all four winds: 東, 南, 西, 北.', img: 'great-winds.PNG' },
   { zh: '十三么', en: 'Thirteen Orphans', faan: '13 faan (limit)',
-    desc: 'One of each terminal and honour tile (1/9 of each suit + 4 winds + 3 dragons) plus one duplicate.' },
+    desc: 'One of each terminal and honour tile (1/9 of each suit + 4 winds + 3 dragons) plus one duplicate.', img: 'thirteen-orphans.PNG' },
   { zh: '四槓子', en: 'All Kongs', faan: '13 faan (limit)',
-    desc: 'All four sets are declared kongs.' },
+    desc: 'All four sets are declared kongs.', img: 'all-kongs.PNG' },
   { zh: '天和', en: 'Heavenly Hand', faan: '13 faan (limit)',
     desc: 'Dealer wins with the initial 14-tile dealt hand.' },
   { zh: '地和', en: 'Earthly Hand', faan: '13 faan (limit)',
@@ -215,6 +218,13 @@ function HandsTab() {
             </span>
           </div>
           <p className="text-xs text-gray-500 leading-relaxed">{hand.desc}</p>
+          {hand.img && (
+            <img
+              src={handImg(hand.img)}
+              alt={hand.en}
+              className="mt-3 w-full rounded-lg border border-gray-100"
+            />
+          )}
         </div>
       ))}
     </div>

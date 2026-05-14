@@ -400,6 +400,7 @@ app.post("/make-server-a83e0fd9/party/:code/continue", async (c) => {
 });
 
 // Start the next round — clears player tiles and transitions to playing (host only)
+// Accepts both round_start and score_summary states so the intermediate lobby can be skipped
 app.post("/make-server-a83e0fd9/party/:code/start-round", async (c) => {
   try {
     const partyCode = c.req.param('code');
@@ -414,7 +415,14 @@ app.post("/make-server-a83e0fd9/party/:code/start-round", async (c) => {
       return c.json({ success: false, error: 'Only host can start the round' }, 403);
     }
 
-    // Reset player tiles so TileInput starts fresh
+    if (party.state !== 'round_start' && party.state !== 'score_summary') {
+      return c.json({ success: false, error: 'Cannot start round from current state' }, 400);
+    }
+
+    // Clear round data and reset player tiles
+    party.winData = null;
+    party.submissions = {};
+    party.scoreData = null;
     party.players.forEach((p: any) => { p.tiles = []; });
     party.state = 'playing';
 

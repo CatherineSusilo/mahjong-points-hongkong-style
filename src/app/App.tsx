@@ -306,31 +306,15 @@ export default function App() {
         body: JSON.stringify({ hostName: playerName, playerA, playerB })
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Swap positions HTTP error:', response.status, text);
+        return;
+      }
       const data = await response.json();
       if (data.success) setParty(data.party);
     } catch (err) {
       console.error('Error swapping positions:', err);
-    }
-  };
-
-  // Continue to round-start lobby (host only)
-  const handleContinueRound = async () => {
-    if (!partyCode || !playerName) return;
-
-    try {
-      const response = await fetch(`${API_URL}/party/${partyCode}/continue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ hostName: playerName })
-      });
-
-      const data = await response.json();
-      if (data.success) setParty(data.party);
-    } catch (err) {
-      console.error('Error continuing round:', err);
     }
   };
 
@@ -527,6 +511,8 @@ export default function App() {
         onTilesUpdate={handleTilesUpdate}
         onEndGame={handleEndGame}
         currentTiles={currentPlayer.tiles}
+        scores={party.scores}
+        players={party.players}
       />
     );
   }
@@ -593,7 +579,7 @@ export default function App() {
         dealerName={party.players.find(p => p.position === '東')?.name || party.host}
         scoreData={party.scoreData}
         isHost={isHost}
-        onContinue={handleContinueRound}
+        onStartRound={handleStartRound}
       />
     );
   }

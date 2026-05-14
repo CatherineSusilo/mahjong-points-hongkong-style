@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
-import { useState } from 'react';
-import { Trophy, Menu, X, Flag, BookOpen } from 'lucide-react';
-import { detectAllPatterns, computeWindDragonPungFaan, computeFlowerFaan, WIND_ORDER } from './hkScoring';
+import { useState, useRef, useEffect } from 'react';
+import { Trophy, Menu, X, Flag, BookOpen, BarChart2 } from 'lucide-react';
+import { computeWindDragonPungFaan, WIND_ORDER, FLOWER_POSITION, SEASON_POSITION } from './hkScoring';
 import { InfoPage } from './InfoPage';
 
 // Load all tile GIFs at build time via Vite glob
@@ -42,6 +42,15 @@ const TILE_TYPES: { [key: string]: string[] } = {
 
 const BONUS_CATEGORIES = new Set(['花', '季']);
 
+const TILE_SORT_ORDER: Record<string, number> = Object.fromEntries(
+  [
+    ...TILE_TYPES['萬子'],
+    ...TILE_TYPES['筒子'],
+    ...TILE_TYPES['索子'],
+    '東', '南', '西', '北', '中', '發', '白',
+  ].map((t, i) => [t, i])
+);
+
 interface TileInputProps {
   playerName: string;
   position: string;
@@ -51,6 +60,8 @@ interface TileInputProps {
   onTilesUpdate: (tiles: string[]) => void;
   onEndGame: () => void;
   currentTiles: string[];
+  scores: { [name: string]: number };
+  players: { name: string; position: string }[];
 }
 
 /** Small image used in "Your Hand"; large for the picker */
@@ -61,15 +72,22 @@ function TileImg({ tile, size = 'sm' }: { tile: string; size?: 'sm' | 'lg' }) {
   return <span className="font-bold text-sm">{tile}</span>;
 }
 
-export function TileInput({ playerName, position, prevailingWind, isHost, onWinClaimed, onTilesUpdate, onEndGame, currentTiles }: TileInputProps) {
+export function TileInput({ playerName, position, prevailingWind, isHost, onWinClaimed, onTilesUpdate, onEndGame, currentTiles, scores, players }: TileInputProps) {
   const [tiles, setTiles] = useState<string[]>(currentTiles);
   const [bonusTiles, setBonusTiles] = useState<string[]>([]);
-  const [concealed, setConcealed] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('萬子');
   const [menuOpen, setMenuOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  // Touch drag refs (no stale-closure issues in non-passive listener)
+  const touchDraggingRef = useRef(false);
+  const justDraggedRef = useRef(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartInfo = useRef<{ index: number; x: number; y: number } | null>(null);
+  const tilesContainerRef = useRef<HTMLDivElement>(null);
 
   // Auto-detect kongs: any tile appearing 4+ times is a kong
   const tileCountMap: Record<string, number> = {};
@@ -106,6 +124,14 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
     onTilesUpdate([]);
   };
 
+  const sortHand = () => {
+    const sorted = [...tiles].sort(
+      (a, b) => (TILE_SORT_ORDER[a] ?? 99) - (TILE_SORT_ORDER[b] ?? 99)
+    );
+    setTiles(sorted);
+    onTilesUpdate(sorted);
+  };
+
   const handleDragStart = (index: number) => setDragIndex(index);
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
@@ -134,6 +160,65 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
     setDragOverIndex(null);
   };
 
+  // Non-passive touchmove so we can preventDefault (block scroll) during active drag
+  useEffect(() => {
+    const el = tilesContainerRef.current;
+    if (!el) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (!touchStartInfo.current) return;
+      const touch = e.touches[0];
+      if (!touchDraggingRef.current) {
+        // Cancel long-press if finger moves before timer fires
+        const dx = touch.clientX - touchStartInfo.current.x;
+        const dy = touch.clientY - touchStartInfo.current.y;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+          if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+          touchStartInfo.current = null;
+        }
+        return;
+      }
+      e.preventDefault();
+      const target = document.elementFromPoint(touch.clientX, touch.clientY);
+      const tileEl = target?.closest('[data-tile-idx]');
+      if (tileEl) {
+        const idx = parseInt(tileEl.getAttribute('data-tile-idx') ?? '', 10);
+        if (!isNaN(idx)) setDragOverIndex(idx);
+      }
+    };
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => el.removeEventListener('touchmove', onTouchMove);
+  }, []);
+
+  const handleTileTouchStart = (e: React.TouchEvent, index: number) => {
+    touchStartInfo.current = { index, x: e.touches[0].clientX, y: e.touches[0].clientY };
+    longPressTimer.current = setTimeout(() => {
+      touchDraggingRef.current = true;
+      setDragIndex(index);
+      setDragOverIndex(index);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 250);
+  };
+
+  const handleTilesTouchEnd = () => {
+    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    if (touchDraggingRef.current && dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
+      const newTiles = [...tiles];
+      const dragged = newTiles[dragIndex];
+      newTiles.splice(dragIndex, 1);
+      newTiles.splice(dragOverIndex, 0, dragged);
+      setTiles(newTiles);
+      onTilesUpdate(newTiles);
+    }
+    if (touchDraggingRef.current) {
+      justDraggedRef.current = true;
+      setTimeout(() => { justDraggedRef.current = false; }, 200);
+    }
+    touchDraggingRef.current = false;
+    touchStartInfo.current = null;
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   const handleMenuIWon = () => {
     setMenuOpen(false);
     onWinClaimed();
@@ -153,6 +238,52 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 to-amber-50 p-4">
       {infoOpen && <InfoPage onClose={() => setInfoOpen(false)} />}
+
+      {/* Leaderboard modal */}
+      {leaderboardOpen && (
+        <>
+          <div className="fixed inset-0 z-30 bg-black/40" onClick={() => setLeaderboardOpen(false)} />
+          <div className="fixed inset-x-4 top-1/2 -translate-y-1/2 z-40 bg-white rounded-2xl shadow-2xl p-5 max-w-sm mx-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Standings</h3>
+              <button onClick={() => setLeaderboardOpen(false)} className="p-1 rounded-lg hover:bg-gray-100">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="space-y-2">
+              {[...players]
+                .sort((a, b) => (scores[b.name] ?? 0) - (scores[a.name] ?? 0))
+                .map((p, idx) => {
+                  const score = scores[p.name] ?? 0;
+                  const isMe = p.name === playerName;
+                  return (
+                    <div
+                      key={p.name}
+                      className={`rounded-lg px-3 py-2.5 flex items-center justify-between ${
+                        isMe ? 'bg-green-50 border border-green-200' : 'bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                          idx === 0 ? 'bg-amber-400 text-white' : 'bg-gray-200 text-gray-600'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        <span className="font-medium text-gray-900">{p.name}</span>
+                        {isMe && <span className="text-xs text-green-600 font-semibold">You</span>}
+                        <span className="text-xs text-gray-400">{p.position}</span>
+                      </div>
+                      <span className={`font-bold text-sm ${score >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                        {score}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        </>
+      )}
+
       <div className="max-w-2xl mx-auto">
 
         {/* Header */}
@@ -192,6 +323,14 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
                       </button>
                       <div className="border-t border-gray-100 my-1" />
                       <button
+                        onClick={() => { setMenuOpen(false); setLeaderboardOpen(true); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-green-50 text-left transition-colors"
+                      >
+                        <BarChart2 className="w-5 h-5 text-green-600 shrink-0" />
+                        <span className="font-semibold text-gray-800">Leaderboard</span>
+                      </button>
+                      <div className="border-t border-gray-100 my-1" />
+                      <button
                         onClick={() => { setMenuOpen(false); setInfoOpen(true); }}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 text-left transition-colors"
                       >
@@ -227,16 +366,11 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
           <div className="flex items-center justify-between mb-3">
             <p className="font-semibold text-gray-900">Your Hand ({effectiveCount}/14)</p>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setConcealed(prev => !prev)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${
-                  concealed
-                    ? 'bg-green-100 text-green-700 border-green-300'
-                    : 'bg-gray-100 text-gray-500 border-gray-200'
-                }`}
-              >
-                門前清 {concealed ? 'ON' : 'OFF'}
-              </button>
+              {tiles.length > 0 && (
+                <button onClick={sortHand} className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                  Sort
+                </button>
+              )}
               {(tiles.length > 0 || bonusTiles.length > 0) && (
                 <button onClick={clearAll} className="text-sm text-red-600 hover:text-red-700 font-medium">
                   Clear All
@@ -246,7 +380,11 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
           </div>
 
           {/* Main tiles — draggable image buttons */}
-          <div className="min-h-20 bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border-2 border-green-200">
+          <div
+            ref={tilesContainerRef}
+            onTouchEnd={handleTilesTouchEnd}
+            className="min-h-20 bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border-2 border-green-200"
+          >
             {tiles.length === 0 ? (
               <p className="text-center text-gray-500 text-sm py-4">Tap tiles below to add</p>
             ) : (
@@ -254,17 +392,19 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
                 {tiles.map((tile, index) => (
                   <div
                     key={index}
+                    data-tile-idx={index}
                     draggable
                     onDragStart={() => handleDragStart(index)}
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDrop={() => handleDrop(index)}
                     onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleTileTouchStart(e, index)}
                     className={`transition-all ${dragIndex === index ? 'opacity-40 scale-95' : ''} ${
                       dragOverIndex === index && dragIndex !== index ? 'ring-2 ring-blue-400 rounded' : ''
                     }`}
                   >
                     <button
-                      onClick={() => removeTile(index)}
+                      onClick={() => { if (justDraggedRef.current) return; removeTile(index); }}
                       className={`rounded shadow border transition-colors cursor-move select-none p-0.5 flex items-center justify-center ${
                         kongSet.has(tile)
                           ? 'bg-blue-50 border-blue-300 hover:bg-red-50 hover:border-red-300'
@@ -291,65 +431,73 @@ export function TileInput({ playerName, position, prevailingWind, isHost, onWinC
           )}
 
           <p className="text-xs text-amber-900 bg-amber-50 rounded-lg px-3 py-2 text-center mt-2">
-            Tap to remove • Drag to reorder
+            Tap to remove • Hold & drag to reorder
           </p>
 
-          {/* Live Faan Hint */}
+          {/* Live Bonus Faan Hint */}
           {(() => {
             if (tiles.length === 0 && bonusTiles.length === 0) return null;
-            const patterns = detectAllPatterns(tiles, autoKongs);
-            const { faan: wdFaan, breakdown: wdBreakdown } = computeWindDragonPungFaan(tiles, autoKongs, position, prevailingWind);
             const seatNum = (WIND_ORDER.indexOf(position as typeof WIND_ORDER[number]) + 1) || 1;
-            const bonusFaan = computeFlowerFaan(bonusTiles, seatNum);
-            const isCapped = patterns[0]?.isCapped ?? false;
-            const patternFaan = patterns.reduce((s, p) => s + p.faan, 0);
-            const total = Math.min(13, patternFaan + (isCapped ? 0 : wdFaan + bonusFaan));
+            const { faan: wdFaan, breakdown: wdBreakdown } = computeWindDragonPungFaan(tiles, autoKongs, position, prevailingWind);
+
+            // Flower/season breakdown
+            const flowers = bonusTiles.filter(t => t in FLOWER_POSITION);
+            const seasons = bonusTiles.filter(t => t in SEASON_POSITION);
+            const flowerLines: Array<{ label: string; faan: number }> = [];
+            if (flowers.length === 4) {
+              flowerLines.push({ label: '梅蘭菊竹 (All Flowers)', faan: 2 });
+            } else {
+              for (const t of flowers.filter(f => FLOWER_POSITION[f] === seatNum)) {
+                flowerLines.push({ label: `${t} (Own Flower)`, faan: 1 });
+              }
+            }
+            if (seasons.length === 4) {
+              flowerLines.push({ label: '春夏秋冬 (All Seasons)', faan: 2 });
+            } else {
+              for (const t of seasons.filter(s => SEASON_POSITION[s] === seatNum)) {
+                flowerLines.push({ label: `${t} (Own Season)`, faan: 1 });
+              }
+            }
+            const noFlowerFaan = tiles.length > 0 && bonusTiles.length === 0 ? 1 : 0;
+            if (noFlowerFaan > 0) {
+              flowerLines.push({ label: '無花 (No Bonus Tiles)', faan: 1 });
+            }
+
+            const bonusFaan = flowerLines.reduce((s, l) => s + l.faan, 0);
+            const total = wdFaan + bonusFaan;
+            const allLines = [...wdBreakdown, ...flowerLines];
+
             return (
               <div className={`mt-2 rounded-lg px-3 py-2 border ${
-                isCapped || total >= 10
-                  ? 'bg-red-50 border-red-200'
-                  : total >= 3
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-blue-50 border-blue-200'
+                total >= 3 ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'
               }`}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                    {patterns.length === 0 && wdBreakdown.length === 0 && bonusFaan === 0
-                      ? <span className="text-xs text-gray-500">Add more tiles to detect a pattern</span>
-                      : patterns.length === 0
-                      ? <span className="text-xs text-gray-400 italic">No base hand pattern yet</span>
-                      : patterns.map(p => (
-                          <span key={p.key} className={`text-xs font-semibold ${
-                            p.isCapped ? 'text-red-700' : 'text-gray-800'
-                          }`}>
-                            {p.zhName} {p.enName}{p.isCapped ? ' ★' : ''}
-                            <span className="font-normal text-gray-500 ml-1">{p.faan}番</span>
-                          </span>
+                  <div className="flex flex-col gap-1 min-w-0 flex-1">
+                    {allLines.length === 0
+                      ? <span className="text-xs text-gray-400">No wind/dragon pungs or matching flowers yet</span>
+                      : allLines.map(b => (
+                          <div key={b.label} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-700">{b.label}</span>
+                            <span className="font-semibold text-green-700 ml-2">+{b.faan}番</span>
+                          </div>
                         ))
                     }
-                    {!isCapped && (wdBreakdown.length > 0 || bonusFaan > 0) && (
-                      <div className="text-xs text-gray-500 flex flex-wrap gap-x-2 mt-0.5">
-                        {wdBreakdown.map(b => <span key={b.label}>+{b.faan} {b.label}</span>)}
-                        {bonusFaan > 0 && <span>花/季 +{bonusFaan}番</span>}
-                      </div>
-                    )}
-                    {isCapped && bonusFaan > 0 && (
-                      <div className="text-xs text-gray-400 mt-0.5">花/季 not counted (capped hand)</div>
-                    )}
                   </div>
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 pl-2">
                     <div className={`text-lg font-bold leading-tight ${
-                      total >= 10 ? 'text-red-600'
-                      : total >= 3  ? 'text-green-700'
-                      : 'text-gray-400'
+                      total >= 3 ? 'text-green-700' : 'text-gray-400'
                     }`}>
-                      ~{total}番
+                      {total}番
                     </div>
-                    <div className="text-xs text-gray-400">
-                      {isCapped ? '★ limit hand' : total < 3 ? `need ${3 - total} more to win` : '✔ can win (≥3番)'}
-                    </div>
+                    <div className="text-xs text-gray-400">bonus</div>
                   </div>
                 </div>
+                {total > 0 && allLines.length > 1 && (
+                  <div className="border-t border-gray-200 mt-1.5 pt-1 flex justify-between text-xs font-semibold text-gray-600">
+                    <span>Total bonus faan</span>
+                    <span>{total}番</span>
+                  </div>
+                )}
               </div>
             );
           })()}
