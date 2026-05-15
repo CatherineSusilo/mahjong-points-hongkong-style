@@ -374,13 +374,16 @@ export default function App() {
         body: JSON.stringify({ hostName: playerName })
       });
 
-      const data = await response.json();
+      const data = await safeJson(response);
 
       if (data.success) {
         setParty(data.party);
+      } else {
+        setError(data.error || 'Failed to end game');
       }
     } catch (err) {
       console.error('Error ending game:', err);
+      setError('Failed to end game — please try again');
     }
   };
 
