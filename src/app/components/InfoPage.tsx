@@ -103,6 +103,8 @@ const HANDS: Hand[] = [
     desc: 'Fully concealed, one suit: 1-1-1-2-3-4-5-6-7-8-9-9-9 plus any tile of the same suit.', img: 'nine-gates.PNG' },
   { zh: '大四喜', en: 'Great Winds', faan: '13 faan (limit)',
     desc: 'Pungs or kongs of all four winds: 東, 南, 西, 北.', img: 'great-winds.PNG' },
+  { zh: '碧和', en: 'All Green Imperial Jade', faan: '13 faan (limit)',
+    desc: 'Composed entirely of green tiles, specifically the Green Dragon and the 2, 3, 4, 6, and 8 of Bamboos.', img: 'all-green-imperial-jade.PNG' },
   { zh: '十三么', en: 'Thirteen Orphans', faan: '13 faan (limit)',
     desc: 'One of each terminal and honour tile (1/9 of each suit + 4 winds + 3 dragons) plus one duplicate.', img: 'thirteen-orphans.PNG' },
   { zh: '四槓子', en: 'All Kongs', faan: '13 faan (limit)',

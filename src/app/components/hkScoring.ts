@@ -76,10 +76,14 @@ export type SuitPatternKey =
   | 'THIRTEEN_ORPHANS'
   | 'ALL_HONOUR'
   | 'GREAT_WINDS'   // detected from kongs/tiles but user picks in UI
+  | 'ALL_GREEN'
   | 'ORPHANS'
   | 'ALL_ONE_SUIT'
   | 'MIXED_ONE_SUIT'
   | null;
+
+/** Tiles that qualify for All Green Imperial Jade (碧和) */
+export const GREEN_TILES = new Set(['發', '二索', '三索', '四索', '六索', '八索']);
 
 export interface DetectedSuitPattern {
   key: SuitPatternKey;
@@ -149,7 +153,16 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 4. ALL_HONOUR: every tile is an honour (wind or dragon)
+  // 4. ALL_GREEN: every tile is a green tile (發, 2/3/4/6/8 of Bamboo)
+  if (allTiles.every(t => GREEN_TILES.has(t))) {
+    return {
+      key: 'ALL_GREEN', faan: 13, isCapped: true,
+      zhName: '碧和', enName: 'All Green Imperial Jade',
+      desc: 'Every tile is a green tile (發, 2/3/4/6/8 of Bamboo).',
+    };
+  }
+
+  // 5. ALL_HONOUR: every tile is an honour (wind or dragon)
   if (allTiles.every(t => HONOUR_TILES.has(t))) {
     return {
       key: 'ALL_HONOUR', faan: 10, isCapped: true,
@@ -158,7 +171,7 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 5. ORPHANS: every tile is a terminal or honour (1s, 9s, winds, dragons)
+  // 6. ORPHANS: every tile is a terminal or honour (1s, 9s, winds, dragons)
   // Skip if hand qualifies as Small Winds (3 wind pungs + 1 wind pair) — Small Winds takes priority
   const windCountsForOrphans = WIND_ORDER.map(w => allCounts[w] ?? 0);
   const isSmallWindsHand =
@@ -172,7 +185,7 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 6. ALL_ONE_SUIT: all tiles same suit, no honours
+  // 7. ALL_ONE_SUIT: all tiles same suit, no honours
   const suits = new Set(allTiles.map(t => SUIT_MAP[t]).filter(Boolean));
   const hasHonour = allTiles.some(t => HONOUR_TILES.has(t));
   if (suits.size === 1 && !hasHonour) {
@@ -183,7 +196,7 @@ export function autoDetectSuitPattern(
     };
   }
 
-  // 7. MIXED_ONE_SUIT: exactly one suit + at least one honour, no cross-suit mix
+  // 8. MIXED_ONE_SUIT: exactly one suit + at least one honour, no cross-suit mix
   if (suits.size === 1 && hasHonour) {
     return {
       key: 'MIXED_ONE_SUIT', faan: 3, isCapped: false,
