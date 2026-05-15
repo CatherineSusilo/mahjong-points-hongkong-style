@@ -585,4 +585,39 @@ app.post("/make-server-a83e0fd9/party/:code/end", async (c) => {
   }
 });
 
+// Set prevailing wind (host only, lobby state only)
+app.post("/make-server-a83e0fd9/party/:code/set-prevailing-wind", async (c) => {
+  try {
+    const partyCode = c.req.param('code');
+    const { hostName, prevailingWind } = await c.req.json();
+
+    const party = await kv.get(`party:${partyCode}`);
+    if (!party) {
+      return c.json({ success: false, error: 'Party not found' }, 404);
+    }
+
+    if (party.host !== hostName) {
+      return c.json({ success: false, error: 'Only host can set prevailing wind' }, 403);
+    }
+
+    if (party.state !== 'lobby') {
+      return c.json({ success: false, error: 'Can only set prevailing wind in lobby' }, 400);
+    }
+
+    const validWinds = ['東', '南', '西', '北'];
+    if (!validWinds.includes(prevailingWind)) {
+      return c.json({ success: false, error: 'Invalid prevailing wind' }, 400);
+    }
+
+    party.prevailingWind = prevailingWind;
+    await kv.set(`party:${partyCode}`, party);
+    console.log(`Prevailing wind set to ${prevailingWind} in party ${partyCode} by ${hostName}`);
+
+    return c.json({ success: true, party });
+  } catch (error) {
+    console.error('Error setting prevailing wind:', error);
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
 Deno.serve(app.fetch);

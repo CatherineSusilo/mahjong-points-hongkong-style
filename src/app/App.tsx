@@ -292,6 +292,27 @@ export default function App() {
     }
   };
 
+  // Set prevailing wind (host only, lobby)
+  const handleSetPrevailingWind = async (wind: string) => {
+    if (!partyCode || !playerName) return;
+
+    try {
+      const response = await fetch(`${API_URL}/party/${partyCode}/set-prevailing-wind`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`
+        },
+        body: JSON.stringify({ hostName: playerName, prevailingWind: wind })
+      });
+
+      const data = await safeJson(response);
+      if (data.success) setParty(data.party);
+    } catch (err) {
+      console.error('Error setting prevailing wind:', err);
+    }
+  };
+
   // Swap positions of two non-host players (host only, lobby)
   const handleSwapPositions = async (playerA: string, playerB: string) => {
     if (!partyCode || !playerName) return;
@@ -492,9 +513,11 @@ export default function App() {
         players={party.players}
         hostName={party.host}
         isHost={isHost}
+        prevailingWind={party.prevailingWind || '東'}
         onStartGame={handleStartGame}
         onSwapPositions={handleSwapPositions}
         onDisbandLobby={handleDisbandLobby}
+        onSetPrevailingWind={handleSetPrevailingWind}
       />
     );
   }

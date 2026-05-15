@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Users, LogIn, UserPlus } from 'lucide-react';
+import { Users, LogIn, UserPlus, Info } from 'lucide-react';
+import { InfoPage } from './InfoPage';
 
 interface PartyEntryProps {
   onCreateParty: (hostName: string) => void;
@@ -10,6 +11,7 @@ export function PartyEntry({ onCreateParty, onJoinParty }: PartyEntryProps) {
   const [mode, setMode] = useState<'select' | 'create' | 'join'>('select');
   const [playerName, setPlayerName] = useState('');
   const [partyCode, setPartyCode] = useState('');
+  const [showInfo, setShowInfo] = useState(false);
 
   const handleCreate = () => {
     if (playerName.trim()) {
@@ -22,6 +24,10 @@ export function PartyEntry({ onCreateParty, onJoinParty }: PartyEntryProps) {
       onJoinParty(partyCode.trim(), playerName.trim());
     }
   };
+
+  if (showInfo) {
+    return <InfoPage onClose={() => setShowInfo(false)} />;
+  }
 
   if (mode === 'select') {
     return (
@@ -50,6 +56,14 @@ export function PartyEntry({ onCreateParty, onJoinParty }: PartyEntryProps) {
             >
               <LogIn className="w-6 h-6" />
               Join Game
+            </button>
+
+            <button
+              onClick={() => setShowInfo(true)}
+              className="w-full bg-white border-2 border-gray-200 text-gray-600 py-4 rounded-xl font-semibold text-lg hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3"
+            >
+              <Info className="w-6 h-6" />
+              How to Play
             </button>
           </div>
 

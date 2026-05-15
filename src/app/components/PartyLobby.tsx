@@ -14,12 +14,21 @@ interface PartyLobbyProps {
   players: Player[];
   hostName: string;
   isHost: boolean;
+  prevailingWind: string;
   onStartGame: () => void;
   onSwapPositions: (playerA: string, playerB: string) => void;
   onDisbandLobby: () => void;
+  onSetPrevailingWind: (wind: string) => void;
 }
 
-export function PartyLobby({ partyCode, players, hostName, isHost, onStartGame, onSwapPositions, onDisbandLobby }: PartyLobbyProps) {
+const WIND_OPTIONS = [
+  { zh: '東', en: 'East' },
+  { zh: '南', en: 'South' },
+  { zh: '西', en: 'West' },
+  { zh: '北', en: 'North' },
+];
+
+export function PartyLobby({ partyCode, players, hostName, isHost, prevailingWind, onStartGame, onSwapPositions, onDisbandLobby, onSetPrevailingWind }: PartyLobbyProps) {
   const [copied, setCopied] = useState(false);
 
   const copyCode = () => {
@@ -135,6 +144,28 @@ export function PartyLobby({ partyCode, players, hostName, isHost, onStartGame, 
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Prevailing Wind */}
+        <div className="mb-6">
+          <p className="text-sm font-semibold text-gray-700 mb-2">Prevailing Wind</p>
+          {isHost ? (
+            <select
+              value={prevailingWind}
+              onChange={(e) => onSetPrevailingWind(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-red-500 focus:outline-none bg-white text-gray-900 font-medium"
+            >
+              {WIND_OPTIONS.map((w) => (
+                <option key={w.zh} value={w.zh}>
+                  {w.zh} ({w.en})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <div className="bg-gray-50 rounded-lg px-4 py-2 text-gray-900 font-medium">
+              {prevailingWind} ({WIND_OPTIONS.find(w => w.zh === prevailingWind)?.en ?? ''})
+            </div>
+          )}
         </div>
 
         {/* Start Button (Host Only) */}
