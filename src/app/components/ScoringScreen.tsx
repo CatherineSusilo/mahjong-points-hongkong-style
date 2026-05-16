@@ -54,7 +54,6 @@ export function ScoringScreen({
   const allPlayersSubmitted = players.every(p => !!submissions[p.name]);
 
   const handleSubmit = () => {
-    if (!isSelfDrawn && !loserName) return;
     if (!allPlayersSubmitted) return;
     onScoreSubmit(claimedBy, loserName, fan, isSelfDrawn, false);
   };
